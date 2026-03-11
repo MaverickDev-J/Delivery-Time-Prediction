@@ -91,4 +91,4 @@ if __name__ == "__main__":
     filename_list = [train_filename,test_filename]
     for filename , path, data in zip(filename_list, data_paths, data_subsets):
         save_data(data=data, save_path=path)
-        logger.info(f"{filename.replace(".csv","")} data saved to location")
+        logger.info(f"{filename.replace('.csv','')} data saved to location")

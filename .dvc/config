@@ -2,5 +2,5 @@
     remote = myremote
 ['remote "myremote"']
     url = s3://delivery-ml-dvc/dvc-store
-    endpointurl = https://delivery-ml-dvc.sgp1.digitaloceanspaces.com
+    endpointurl = https://sgp1.digitaloceanspaces.com
     region = sgp1

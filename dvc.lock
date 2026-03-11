@@ -1,0 +1,176 @@
+schema: '2.0'
+stages:
+  data_cleaning:
+    cmd: uv run python src/data/data_cleaning.py
+    deps:
+    - path: data/raw/swiggy.csv
+      hash: md5
+      md5: 0b050b37dfe6cfbfaa18d7cb4e454377
+      size: 7772212
+      isexec: true
+    - path: src/data/data_cleaning.py
+      hash: md5
+      md5: f5ad421aafd57c91a1366fef5b226570
+      size: 9519
+      isexec: true
+    outs:
+    - path: data/cleaned/swiggy_cleaned.csv
+      hash: md5
+      md5: 88abff5e8ddf25d6d39300c8f9b531d2
+      size: 4463050
+      isexec: true
+  data_preparation:
+    cmd: uv run python src/data/data_preparation.py
+    deps:
+    - path: data/cleaned/swiggy_cleaned.csv
+      hash: md5
+      md5: 88abff5e8ddf25d6d39300c8f9b531d2
+      size: 4463050
+      isexec: true
+    - path: src/data/data_preparation.py
+      hash: md5
+      md5: 46073c9715ca04260bd1df6354f2d867
+      size: 3009
+      isexec: true
+    params:
+      params.yaml:
+        Data_Preparation.random_state: 42
+        Data_Preparation.test_size: 0.25
+    outs:
+    - path: data/interim/test.csv
+      hash: md5
+      md5: c799f2b1d88b52a6479b4136d67c83af
+      size: 1115157
+      isexec: true
+    - path: data/interim/train.csv
+      hash: md5
+      md5: e56b0ba586811f44d0281289341376f7
+      size: 3344933
+      isexec: true
+  data_preprocessing:
+    cmd: uv run python src/features/data_preprocessing.py
+    deps:
+    - path: data/interim/test.csv
+      hash: md5
+      md5: c799f2b1d88b52a6479b4136d67c83af
+      size: 1115157
+      isexec: true
+    - path: data/interim/train.csv
+      hash: md5
+      md5: e56b0ba586811f44d0281289341376f7
+      size: 3344933
+      isexec: true
+    - path: src/features/data_preprocessing.py
+      hash: md5
+      md5: 0d57fa9edfb286bad4167977f06a184e
+      size: 6951
+      isexec: true
+    outs:
+    - path: data/processed/test_trans.csv
+      hash: md5
+      md5: 3d5c3c35af89d966922d41310d6e481d
+      size: 1348821
+      isexec: true
+    - path: data/processed/train_trans.csv
+      hash: md5
+      md5: cceb332a1cab549a0c26b40ebf1975b1
+      size: 4032189
+      isexec: true
+    - path: models/preprocessor.joblib
+      hash: md5
+      md5: 3334ce32eb7d9dd5a820cada24326077
+      size: 7243
+      isexec: true
+  train:
+    cmd: uv run python src/models/train.py
+    deps:
+    - path: data/processed/train_trans.csv
+      hash: md5
+      md5: cceb332a1cab549a0c26b40ebf1975b1
+      size: 4032189
+      isexec: true
+    - path: src/models/train.py
+      hash: md5
+      md5: 7e3fdfe8e1b25a08b4d2dad297d03c78
+      size: 4912
+      isexec: true
+    params:
+      params.yaml:
+        Train.LightGBM:
+          n_estimators: 154
+          max_depth: 27
+          learning_rate: 0.22234435854395157
+          subsample: 0.7592213724048168
+          min_child_weight: 20
+          min_split_gain: 0.004604680609280751
+          reg_lambda: 97.81002379097947
+          device: cpu
+          n_jobs: -1
+        Train.Random_Forest:
+          n_estimators: 479
+          criterion: squared_error
+          max_depth: 17
+          max_features: 1
+          min_samples_split: 9
+          min_samples_leaf: 2
+          max_samples: 0.6603673526197066
+          verbose: 1
+          n_jobs: -1
+    outs:
+    - path: models/model.joblib
+      hash: md5
+      md5: 0660de88ce6740a9771d6e0299f82b39
+      size: 148754216
+      isexec: true
+    - path: models/power_transformer.joblib
+      hash: md5
+      md5: 8c3329476a50e2ddf794f60de8228f75
+      size: 805
+      isexec: true
+    - path: models/stacking_regressor.joblib
+      hash: md5
+      md5: 362dfe7780b30dc1bd686d8677750d19
+      size: 148742634
+      isexec: true
+  evaluation:
+    cmd: uv run python src/models/evaluation.py
+    deps:
+    - path: data/processed/test_trans.csv
+      hash: md5
+      md5: 3d5c3c35af89d966922d41310d6e481d
+      size: 1348821
+      isexec: true
+    - path: data/processed/train_trans.csv
+      hash: md5
+      md5: cceb332a1cab549a0c26b40ebf1975b1
+      size: 4032189
+      isexec: true
+    - path: models/model.joblib
+      hash: md5
+      md5: 0660de88ce6740a9771d6e0299f82b39
+      size: 148754216
+      isexec: true
+    - path: src/models/evaluation.py
+      hash: md5
+      md5: 291c2857de0f8373e8ddb08733faf5d9
+      size: 6053
+      isexec: true
+    outs:
+    - path: run_information.json
+      hash: md5
+      md5: 7d30c48289d7ba0fe2aa3d26f3d9f93e
+      size: 216
+      isexec: true
+  register_model:
+    cmd: uv run python src/models/register_model.py
+    deps:
+    - path: run_information.json
+      hash: md5
+      md5: 7d30c48289d7ba0fe2aa3d26f3d9f93e
+      size: 216
+      isexec: true
+    - path: src/models/register_model.py
+      hash: md5
+      md5: 7d16afe8da6af0a42a21255009c95801
+      size: 2163
+      isexec: true

@@ -87,3 +87,8 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+# DVC generated files
+/models/
+/run_information.json
+.venv/

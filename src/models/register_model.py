@@ -25,12 +25,12 @@ handler.setFormatter(formatter)
 # initialize dagshub
 import dagshub
 import mlflow.client
-dagshub.init(repo_owner='himanshu1703', 
-             repo_name='swiggy-delivery-time-prediction', 
+dagshub.init(repo_owner='maverick011', 
+             repo_name='Delivery-Time-Prediction', 
              mlflow=True)
 
 # set the mlflow tracking server
-mlflow.set_tracking_uri("https://dagshub.com/himanshu1703/swiggy-delivery-time-prediction.mlflow")
+mlflow.set_tracking_uri("https://dagshub.com/maverick011/Delivery-Time-Prediction.mlflow")
 
 
 def load_model_information(file_path):
@@ -55,8 +55,7 @@ if __name__ == "__main__":
     model_name = run_info["model_name"]
     
     # model to register path
-    model_registry_path = f"runs:/{run_id}/{model_name}"
-    
+    model_registry_path = run_info["artifact_path"]
     
     # register the model
     model_version = mlflow.register_model(model_uri=model_registry_path,
