@@ -200,6 +200,7 @@ def perform_data_cleaning(data: pd.DataFrame):
     )
     
     return cleaned_data.dropna()
+ 
     
     
 

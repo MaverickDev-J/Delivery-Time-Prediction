@@ -92,3 +92,13 @@ target/
 /models/
 /run_information.json
 .venv/
+
+# Hugging Face deployment directory
+/hf_deploy/
+
+# Temp outputs
+/out.txt
+
+# Data files in notebooks
+notebooks/*.csv
+

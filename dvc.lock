@@ -139,38 +139,31 @@ stages:
       hash: md5
       md5: 3d5c3c35af89d966922d41310d6e481d
       size: 1348821
-      isexec: true
     - path: data/processed/train_trans.csv
       hash: md5
       md5: cceb332a1cab549a0c26b40ebf1975b1
       size: 4032189
-      isexec: true
     - path: models/model.joblib
       hash: md5
       md5: 0660de88ce6740a9771d6e0299f82b39
       size: 148754216
-      isexec: true
     - path: src/models/evaluation.py
       hash: md5
-      md5: 291c2857de0f8373e8ddb08733faf5d9
-      size: 6053
-      isexec: true
+      md5: c20d5b19c3d2fced812105b87ebc2ca8
+      size: 6079
     outs:
     - path: run_information.json
       hash: md5
-      md5: 7d30c48289d7ba0fe2aa3d26f3d9f93e
-      size: 216
-      isexec: true
+      md5: 607a024f525b136e769a3b4e04c2a666
+      size: 245
   register_model:
     cmd: uv run python src/models/register_model.py
     deps:
     - path: run_information.json
       hash: md5
-      md5: 7d30c48289d7ba0fe2aa3d26f3d9f93e
-      size: 216
-      isexec: true
+      md5: 607a024f525b136e769a3b4e04c2a666
+      size: 245
     - path: src/models/register_model.py
       hash: md5
       md5: 7d16afe8da6af0a42a21255009c95801
       size: 2163
-      isexec: true

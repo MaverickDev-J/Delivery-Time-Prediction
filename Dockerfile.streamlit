@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+# LightGBM system dependency
+RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies first (better Docker layer caching)
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy only what the Streamlit app needs
+COPY streamlit_app.py ./
+COPY scripts/data_clean_utils.py ./scripts/
+COPY models/preprocessor.joblib ./models/
+COPY models/model.joblib ./models/
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "streamlit_app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true"]

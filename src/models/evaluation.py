@@ -167,7 +167,7 @@ if __name__ == "__main__":
         mlflow.log_artifact(root_path / "models" / "preprocessor.joblib")
         
         # get the current run artifact uri
-        artifact_uri = mlflow.get_artifact_uri()
+        artifact_uri = mlflow.get_artifact_uri("delivery_time_pred_model")
         
         logger.info("Mlflow logging complete and model logged")
         
