@@ -18,18 +18,21 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 # Copy shared packages and all services
-COPY contracts/ ./contracts/
-COPY core/ ./core/
-COPY services/ ./services/
+COPY --chown=appuser:appuser contracts/ ./contracts/
+COPY --chown=appuser:appuser core/ ./core/
+COPY --chown=appuser:appuser services/ ./services/
 
 # Create data directory for SQLite fallback
-RUN mkdir -p /app/data && chown -R appuser:appuser /app
+RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
 
 USER appuser
 
 # SERVICE_MODULE is set per-service via docker-compose
 ARG SERVICE_MODULE=services.order.app:app
 ENV SERVICE_MODULE=${SERVICE_MODULE}
+
+# Add virtualenv to PATH so uvicorn runs directly without runtime sync
+ENV PATH="/app/.venv/bin:$PATH"
 
 ARG SERVICE_PORT=8000
 ENV SERVICE_PORT=${SERVICE_PORT}
@@ -39,4 +42,4 @@ EXPOSE ${SERVICE_PORT}
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
   CMD curl -f http://localhost:${SERVICE_PORT}/health || exit 1
 
-CMD uv run uvicorn ${SERVICE_MODULE} --host 0.0.0.0 --port ${SERVICE_PORT}
+CMD ["sh", "-c", "uvicorn ${SERVICE_MODULE} --host 0.0.0.0 --port ${SERVICE_PORT}"]

@@ -19,14 +19,15 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 # Copy application and contract packages
-COPY contracts/ ./contracts/
-COPY core/ ./core/
-COPY scripts/ ./scripts/
-COPY models/ ./models/
-COPY app.py ./
-COPY run_information.json* ./
+COPY --chown=appuser:appuser contracts/ ./contracts/
+COPY --chown=appuser:appuser core/ ./core/
+COPY --chown=appuser:appuser scripts/ ./scripts/
+COPY --chown=appuser:appuser models/ ./models/
+COPY --chown=appuser:appuser app.py ./
+COPY --chown=appuser:appuser run_information.json* ./
 
-RUN chown -R appuser:appuser /app
+ENV PATH="/app/.venv/bin:$PATH"
+
 USER appuser
 
 EXPOSE 8000
@@ -34,4 +35,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uv", "run", "python", "app.py"]
+CMD ["python", "app.py"]

@@ -10,15 +10,16 @@ import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from core.database import create_engine_factory, get_session, init_tables
+from core.database import create_db_engine, create_session_factory, get_session, init_tables
 from core.metrics import add_metrics_middleware, expose_metrics
 from services.monitoring.models import MonitoringBase
 
 # ── Database setup ───────────────────────────────────────────────────────────
 
 DB_URL = os.environ.get("MONITORING_DB_URL", "sqlite:///data/monitoring.db")
-engine_factory = create_engine_factory(DB_URL)
-init_tables(engine_factory(), MonitoringBase)
+engine = create_db_engine(DB_URL)
+SessionFactory = create_session_factory(engine)
+init_tables(engine, MonitoringBase)
 
 # ── FastAPI app ──────────────────────────────────────────────────────────────
 
@@ -73,7 +74,7 @@ def log_prediction_endpoint(req: LogPredictionRequest):
     """Log an ETA prediction for monitoring."""
     from services.monitoring.prediction_logger import log_prediction
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         log = log_prediction(
             session,
             order_id=req.order_id,
@@ -94,7 +95,7 @@ def log_actual_endpoint(req: LogActualRequest):
     """Join a delayed actual delivery time onto the prediction row."""
     from services.monitoring.prediction_logger import join_actual
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         result = join_actual(session, order_id=req.order_id, actual_minutes=req.actual_minutes)
         if result is None:
             raise HTTPException(status_code=404, detail=f"No unmatched prediction found for order {req.order_id}")
@@ -111,7 +112,7 @@ def drift_check_endpoint(req: DriftCheckRequest):
     """Run drift detection (PSI) across provided features."""
     from services.monitoring.drift_detector import run_drift_check
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         reports = run_drift_check(
             session,
             reference_data=req.reference_data,
@@ -136,7 +137,7 @@ def drift_report_endpoint():
     """Get the most recent drift reports."""
     from services.monitoring.drift_detector import get_latest_drift_reports
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         reports = get_latest_drift_reports(session)
         return {
             "reports": [
@@ -157,7 +158,7 @@ def performance_endpoint():
     """Get rolling MAE, late-rate, and interval coverage."""
     from services.monitoring.performance_tracker import compute_rolling_metrics
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         metrics = compute_rolling_metrics(session)
         return {
             "mae": metrics.mae,
@@ -173,7 +174,7 @@ def retrain_decisions_endpoint():
     """Get audit log of retrain gate evaluations."""
     from services.monitoring.models import RetrainDecision
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         decisions = (
             session.query(RetrainDecision)
             .order_by(RetrainDecision.decided_at.desc())
@@ -215,7 +216,7 @@ def evaluate_gate_endpoint(config: GateConfigRequest | None = None):
             cooldown_seconds=config.cooldown_seconds,
         )
 
-    with get_session(engine_factory()) as session:
+    with get_session(SessionFactory) as session:
         drift_reports = get_latest_drift_reports(session)
         performance = compute_rolling_metrics(session)
         result = evaluate_gate(session, drift_reports, performance, gate_config)
