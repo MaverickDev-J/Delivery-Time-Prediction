@@ -1,79 +1,92 @@
-import mlflow
-import dagshub
 import json
-from pathlib import Path
-from mlflow import MlflowClient
 import logging
+import os
+import sys
+from pathlib import Path
 
+# Ensure project root is in sys.path
+root_path = Path(__file__).resolve().parent.parent.parent
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
 
-# create logger
+import mlflow
+from mlflow import MlflowClient
+
 logger = logging.getLogger("register_model")
 logger.setLevel(logging.INFO)
-
-# console handler
 handler = logging.StreamHandler()
 handler.setLevel(logging.INFO)
-
-# add handler to logger
-logger.addHandler(handler)
-
-# create a fomratter
-formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# add formatter to handler
+formatter = logging.Formatter(fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
-
-# initialize dagshub
-import dagshub
-import mlflow.client
-dagshub.init(repo_owner='maverick011', 
-             repo_name='Delivery-Time-Prediction', 
-             mlflow=True)
-
-# set the mlflow tracking server
-mlflow.set_tracking_uri("https://dagshub.com/maverick011/Delivery-Time-Prediction.mlflow")
+if not logger.handlers:
+    logger.addHandler(handler)
 
 
-def load_model_information(file_path):
-    with open(file_path) as f:
-        run_info = json.load(f)
-        
-    return run_info
+def setup_mlflow(root_path: Path):
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
+    repo_name = os.getenv("DAGSHUB_REPO_NAME", "Delivery-Time-Prediction")
+
+    if repo_owner and os.getenv("DAGSHUB_TOKEN"):
+        try:
+            import dagshub
+            dagshub.init(repo_owner=repo_owner, repo_name=repo_name, mlflow=True)
+        except Exception as e:
+            logger.warning(f"Could not initialize DagsHub ({e})")
+
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    else:
+        local_mlflow_dir = root_path / "mlruns"
+        mlflow.set_tracking_uri(f"file:///{local_mlflow_dir.as_posix()}")
 
 
 if __name__ == "__main__":
-    # root path
-    root_path = Path(__file__).parent.parent.parent
-    
-    # run information file path
     run_info_path = root_path / "run_information.json"
-    
-    # register the model
-    run_info = load_model_information(run_info_path)
-    
-    # get the run id
-    run_id = run_info["run_id"]
+    reports_dir = root_path / "reports"
+    reports_dir.mkdir(exist_ok=True, parents=True)
+    registry_report_path = reports_dir / "registry.json"
+
+    setup_mlflow(root_path)
+
+    with open(run_info_path, "r") as f:
+        run_info = json.load(f)
+
     model_name = run_info["model_name"]
-    
-    # model to register path
-    model_registry_path = run_info["artifact_path"]
-    
-    # register the model
-    model_version = mlflow.register_model(model_uri=model_registry_path,
-                                          name=model_name)
-    
-    
-    # get the model version
-    registered_model_version = model_version.version
-    registered_model_name = model_version.name
-    logger.info(f"The latest model version in model registry is {registered_model_version}")
-    
-    # update the stage of the model to staging
-    client = MlflowClient()
-    client.transition_model_version_stage(
-        name=registered_model_name,
-        version=registered_model_version,
-        stage="Staging"
+    model_uri = run_info["artifact_path"]
+
+    logger.info(f"Registering model '{model_name}' from URI: {model_uri}")
+    registered_model = mlflow.register_model(
+        model_uri=model_uri,
+        name=model_name,
     )
-    
-    logger.info("Model pushed to Staging stage")
-    
+
+    version = str(registered_model.version)
+    logger.info(f"Registered model version: {version}")
+
+    client = MlflowClient()
+
+    # In MLflow 3.x, use model aliases instead of deprecated stages
+    # Set alias @champion for active production model version
+    try:
+        client.set_registered_model_alias(
+            name=model_name,
+            alias="champion",
+            version=version,
+        )
+        logger.info(f"Assigned alias '@champion' to version {version}")
+    except Exception as e:
+        logger.warning(f"Alias assignment notice: {e}")
+
+    registry_data = {
+        "model_name": model_name,
+        "version": version,
+        "alias": "champion",
+        "registered_uri": model_uri,
+        "status": "READY",
+    }
+
+    with open(registry_report_path, "w") as f:
+        json.dump(registry_data, f, indent=4)
+
+    logger.info(f"Registry report written to {registry_report_path}")

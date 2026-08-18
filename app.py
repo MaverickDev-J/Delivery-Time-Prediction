@@ -1,139 +1,149 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from sklearn.pipeline import Pipeline
-import uvicorn
-import pandas as pd
-import mlflow
-import json
+import time
+from contextlib import asynccontextmanager
+
 import joblib
-from mlflow import MlflowClient
-from sklearn import set_config
-from scripts.data_clean_utils import perform_data_cleaning
+import pandas as pd
+import uvicorn
+from sklearn.pipeline import Pipeline
 
-# set the output as pandas
-set_config(transform_output='pandas')
+from contracts.features import (
+    FEATURE_SCHEMA_VERSION,
+    OrderPredictionRequest,
+    OrderPredictionResponse,
+)
+from core.app_factory import create_app
+from core.config import ETAServiceSettings
+from core.errors import ModelNotReadyException
+from core.logging import get_correlation_id, setup_logger
+from scripts.data_clean_utils import normalise_for_inference
 
-# initialize dagshub
-import dagshub
-import mlflow.client
+logger = setup_logger("eta-service", service_name="eta-service")
+settings = ETAServiceSettings()
 
-dagshub.init(repo_owner='maverick011',        # YOUR dagshub user
-             repo_name='Delivery-Time-Prediction', 
-             mlflow=True)
-mlflow.set_tracking_uri("https://dagshub.com/maverick011/Delivery-Time-Prediction.mlflow")
-
-
-class Data(BaseModel):  
-    ID: str
-    Delivery_person_ID: str
-    Delivery_person_Age: str
-    Delivery_person_Ratings: str
-    Restaurant_latitude: float
-    Restaurant_longitude: float
-    Delivery_location_latitude: float
-    Delivery_location_longitude: float
-    Order_Date: str
-    Time_Orderd: str
-    Time_Order_picked: str
-    Weatherconditions: str
-    Road_traffic_density: str
-    Vehicle_condition: int
-    Type_of_order: str
-    Type_of_vehicle: str
-    multiple_deliveries: str
-    Festival: str
-    City: str
-
-    
-    
-def load_model_information(file_path):
-    with open(file_path) as f:
-        run_info = json.load(f)
-        
-    return run_info
+# In-memory artifact state
+model_state = {
+    "model_pipeline": None,
+    "model_version": "1.0.0",
+    "ready": False,
+    "degraded_fallback_eta": 32.0,  # Historical median fallback
+}
 
 
-def load_transformer(transformer_path):
-    transformer = joblib.load(transformer_path)
-    return transformer
+def load_local_pipeline(settings: ETAServiceSettings) -> Pipeline | None:
+    """Load preprocessor and model from local disk artifacts."""
+    try:
+        preprocessor = joblib.load(settings.preprocessor_artifact_path)
+        model = joblib.load(settings.model_artifact_path)
+        pipe = Pipeline(steps=[
+            ("preprocess", preprocessor),
+            ("regressor", model),
+        ])
+        logger.info("Successfully loaded local model pipeline artifacts.")
+        return pipe
+    except Exception as e:
+        logger.error(f"Failed to load local model artifacts: {e}")
+        return None
 
 
+@asynccontextmanager
+async def lifespan(app):
+    """FastAPI lifespan: load model artifacts at startup."""
+    logger.info("Starting up DeliverIQ ETA Prediction Service...")
+    pipe = load_local_pipeline(settings)
+    if pipe:
+        model_state["model_pipeline"] = pipe
+        model_state["ready"] = True
+    else:
+        logger.warning("Service starting in degraded fallback mode (artifacts missing).")
+        model_state["ready"] = False
 
-# columns to preprocess in data
-num_cols = ["age",
-            "ratings",
-            "pickup_time_minutes",
-            "distance"]
+    yield
 
-nominal_cat_cols = ['weather',
-                    'type_of_order',
-                    'type_of_vehicle',
-                    "festival",
-                    "city_type",
-                    "is_weekend",
-                    "order_time_of_day"]
-
-ordinal_cat_cols = ["traffic","distance_type"]
-
-#mlflow client
-client = MlflowClient()
-
-# load the preprocessor
-preprocessor_path = "models/preprocessor.joblib"
-preprocessor = load_transformer(preprocessor_path)
-
-# load the model
-model_path = "models/model.joblib"
-model = joblib.load(model_path)
+    logger.info("Shutting down ETA Prediction Service.")
 
 
+app = create_app(settings=settings, lifespan=lifespan)
 
-# build the model pipeline
-model_pipe = Pipeline(steps=[
-    ('preprocess',preprocessor),
-    ("regressor",model)
-])
 
-# create the app
-app = FastAPI()
+@app.get("/ready", tags=["Health"])
+async def ready():
+    """Readiness probe verifying model pipeline availability."""
+    if not model_state["ready"] and model_state["model_pipeline"] is None:
+        raise ModelNotReadyException(detail="Model artifacts are not loaded.")
+    return {
+        "status": "READY",
+        "service": settings.service_name,
+        "model_version": model_state["model_version"],
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+    }
 
-# create the home endpoint
-@app.get(path="/")
-def home():
-    return "Welcome to the Swiggy Food Delivery Time Prediction App"
 
-# create the predict endpoint
-@app.post(path="/predict")
-def do_predictions(data: Data):
-    pred_data = pd.DataFrame({
-        'ID': data.ID,
-        'Delivery_person_ID': data.Delivery_person_ID,
-        'Delivery_person_Age': data.Delivery_person_Age,
-        'Delivery_person_Ratings': data.Delivery_person_Ratings,
-        'Restaurant_latitude': data.Restaurant_latitude,
-        'Restaurant_longitude': data.Restaurant_longitude,
-        'Delivery_location_latitude': data.Delivery_location_latitude,
-        'Delivery_location_longitude': data.Delivery_location_longitude,
-        'Order_Date': data.Order_Date,
-        'Time_Orderd': data.Time_Orderd,
-        'Time_Order_picked': data.Time_Order_picked,
-        'Weatherconditions': data.Weatherconditions,
-        'Road_traffic_density': data.Road_traffic_density,
-        'Vehicle_condition': data.Vehicle_condition,
-        'Type_of_order': data.Type_of_order,
-        'Type_of_vehicle': data.Type_of_vehicle,
-        'multiple_deliveries': data.multiple_deliveries,
-        'Festival': data.Festival,
-        'City': data.City
-        },index=[0]
+@app.get("/version", tags=["Metadata"])
+async def version():
+    """Service metadata and version info."""
+    return {
+        "service": settings.service_name,
+        "model_version": model_state["model_version"],
+        "feature_schema_version": FEATURE_SCHEMA_VERSION,
+        "degraded_mode": not model_state["ready"],
+    }
+
+
+@app.post("/predict", response_model=OrderPredictionResponse, tags=["Inference"])
+async def predict(request: OrderPredictionRequest):
+    """
+    Generate an at-cart ETA prediction with confidence intervals.
+    Degrades to historical median heuristic if model is unavailable.
+    """
+    start_time = time.perf_counter()
+    correlation_id = get_correlation_id()
+
+    # Convert Pydantic request to DataFrame
+    req_dict = request.model_dump()
+    raw_df = pd.DataFrame([req_dict])
+
+    # Normalise features for inference without dropping rows
+    normalized_df = normalise_for_inference(raw_df)
+
+    is_degraded = False
+    eta_prediction: float
+
+    if model_state["ready"] and model_state["model_pipeline"] is not None:
+        try:
+            preds = model_state["model_pipeline"].predict(normalized_df)
+            eta_prediction = float(preds[0])
+        except Exception as e:
+            logger.error(f"Inference execution failed: {e}. Falling back to degraded mode.")
+            is_degraded = True
+            eta_prediction = model_state["degraded_fallback_eta"]
+    else:
+        is_degraded = True
+        eta_prediction = model_state["degraded_fallback_eta"]
+
+    # Compute prediction intervals
+    margin = settings.prediction_interval_margin
+    lower_bound = max(5.0, round(eta_prediction - margin, 1))
+    upper_bound = max(lower_bound + 2.0, round(eta_prediction + margin, 1))
+    point_estimate = round(eta_prediction, 1)
+
+    latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    logger.info(
+        f"ETA prediction: {point_estimate} min [{lower_bound}-{upper_bound}] | "
+        f"Latency: {latency_ms}ms | Degraded: {is_degraded}"
     )
-    # clean the raw input data
-    cleaned_data = perform_data_cleaning(pred_data)
-    # get the predictions
-    predictions = model_pipe.predict(cleaned_data)[0]
 
-    return predictions
-   
-   
+    return OrderPredictionResponse(
+        eta_minutes=point_estimate,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        model_version=model_state["model_version"],
+        feature_schema_version=FEATURE_SCHEMA_VERSION,
+        degraded=is_degraded,
+        latency_ms=latency_ms,
+        request_id=correlation_id,
+    )
+
+
 if __name__ == "__main__":
-    uvicorn.run(app="app:app", host="127.0.0.1", port=8000)
+    uvicorn.run("app:app", host=settings.host, port=settings.port, reload=settings.debug)

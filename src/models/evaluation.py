@@ -1,189 +1,137 @@
-import pandas as pd
-import joblib
-import logging
-import mlflow
-import dagshub
-from pathlib import Path
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import mean_absolute_error, r2_score
 import json
+import logging
+import os
+import sys
+from pathlib import Path
 
+# Ensure project root is in sys.path
+root_path = Path(__file__).resolve().parent.parent.parent
+if str(root_path) not in sys.path:
+    sys.path.insert(0, str(root_path))
 
-# initialize dagshub
-import dagshub
-dagshub.init(repo_owner='maverick011', 
-             repo_name='Delivery-Time-Prediction', 
-             mlflow=True)
+import joblib
+import mlflow
+import numpy as np
+import pandas as pd
+from sklearn.metrics import mean_absolute_error, r2_score
 
-# set the mlflow tracking server
-mlflow.set_tracking_uri("https://dagshub.com/maverick011/Delivery-Time-Prediction.mlflow")
+from contracts.features import TARGET_COLUMN
 
-# set mlflow experment name
-mlflow.set_experiment("DVC Pipeline")
-
-TARGET = "time_taken"
-
-# create logger
 logger = logging.getLogger("model_evaluation")
 logger.setLevel(logging.INFO)
-
-# console handler
 handler = logging.StreamHandler()
 handler.setLevel(logging.INFO)
-
-# add handler to logger
-logger.addHandler(handler)
-
-# create a fomratter
-formatter = logging.Formatter(fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# add formatter to handler
+formatter = logging.Formatter(fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
+if not logger.handlers:
+    logger.addHandler(handler)
 
 
-def load_data(data_path: Path) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(data_path)
-    
-    except FileNotFoundError:
-        logger.error("The file to load does not exist")
-    
-    return df
+def setup_mlflow(root_path: Path):
+    """Configure MLflow tracking server from environment variables or local directory fallback."""
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    repo_owner = os.getenv("DAGSHUB_REPO_OWNER")
+    repo_name = os.getenv("DAGSHUB_REPO_NAME", "Delivery-Time-Prediction")
+
+    if repo_owner and os.getenv("DAGSHUB_TOKEN"):
+        try:
+            import dagshub
+            dagshub.init(repo_owner=repo_owner, repo_name=repo_name, mlflow=True)
+            logger.info(f"Initialized DagsHub tracking for {repo_owner}/{repo_name}")
+        except Exception as e:
+            logger.warning(f"Could not initialize DagsHub ({e}), using local MLflow tracking.")
+
+    if tracking_uri:
+        mlflow.set_tracking_uri(tracking_uri)
+    else:
+        local_mlflow_dir = root_path / "mlruns"
+        local_mlflow_dir.mkdir(exist_ok=True, parents=True)
+        mlflow.set_tracking_uri(f"file:///{local_mlflow_dir.as_posix()}")
+
+    mlflow.set_experiment("DeliverIQ_Pipeline")
 
 
-def make_X_and_y(data:pd.DataFrame, target_column: str):
-    X = data.drop(columns=[target_column])
-    y = data[target_column]
-    return X, y
+def calculate_metrics(y_true: pd.Series, y_pred: np.ndarray) -> dict:
+    mae = float(mean_absolute_error(y_true, y_pred))
+    r2 = float(r2_score(y_true, y_pred))
+    # Business metric: percentage of deliveries > 5 mins later than predicted
+    late_rate = float(np.mean((y_true.values - y_pred) > 5.0))
+    # Business metric: percentage of deliveries > 5 mins earlier than predicted
+    early_rate = float(np.mean((y_pred - y_true.values) > 5.0))
 
-def load_model(model_path: Path):
-    model = joblib.load(model_path)
-    return model
-
-
-def save_model_info(save_json_path,run_id, artifact_path, model_name):
-    info_dict = {
-        "run_id": run_id,
-        "artifact_path": artifact_path,
-        "model_name": model_name
+    return {
+        "mae": mae,
+        "r2": r2,
+        "late_rate_gt_5min": late_rate,
+        "early_rate_gt_5min": early_rate,
     }
-    with open(save_json_path,"w") as f:
-        json.dump(info_dict,f,indent=4)
 
 
 if __name__ == "__main__":
-    # root path
-    root_path = Path(__file__).parent.parent.parent
-    # train data load path
     train_data_path = root_path / "data" / "processed" / "train_trans.csv"
     test_data_path = root_path / "data" / "processed" / "test_trans.csv"
-    # model path
     model_path = root_path / "models" / "model.joblib"
-    
-    
-    # load the training data
-    train_data = load_data(train_data_path)
-    logger.info("Train data loaded successfully")
-    # load the test data
-    test_data = load_data(test_data_path)
-    logger.info("Test data loaded successfully")
-    
-    # split the train and test data
-    X_train, y_train = make_X_and_y(train_data,TARGET)
-    X_test, y_test = make_X_and_y(test_data,TARGET)
-    logger.info("Data split completed")
-    
-    # load the model
-    model = load_model(model_path)
-    logger.info("Model Loaded successfully")
-    
-    
-    # get the predictions
+
+    setup_mlflow(root_path)
+
+    train_data = pd.read_csv(train_data_path)
+    test_data = pd.read_csv(test_data_path)
+
+    X_train = train_data.drop(columns=[TARGET_COLUMN])
+    y_train = train_data[TARGET_COLUMN]
+
+    X_test = test_data.drop(columns=[TARGET_COLUMN])
+    y_test = test_data[TARGET_COLUMN]
+
+    logger.info("Loading trained model...")
+    model = joblib.load(model_path)
+
+    logger.info("Evaluating predictions on train and test subsets...")
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
-    logger.info("prediction on data complete")
-    
-    # calculate the train and test mae
-    train_mae = mean_absolute_error(y_train,y_train_pred)
-    test_mae = mean_absolute_error(y_test,y_test_pred)
-    logger.info("error calculated")
-    
-    # calculate the r2 scores
-    train_r2 = r2_score(y_train,y_train_pred)
-    test_r2 = r2_score(y_test,y_test_pred)
-    logger.info("r2 score calculated")
-    
-    # calculate cross val scores
-    cv_scores = cross_val_score(model,
-                                X_train,
-                                y_train,
-                                cv=5,
-                                scoring="neg_mean_absolute_error",
-                                n_jobs=-1)
-    logger.info("cross validation complete")
-    
-    # mean cross val score
-    mean_cv_score = -(cv_scores.mean())
-    
-    # log with mlflow
+
+    train_metrics = calculate_metrics(y_train, y_train_pred)
+    test_metrics = calculate_metrics(y_test, y_test_pred)
+
+    logger.info(f"Test MAE: {test_metrics['mae']:.2f} min | Test R2: {test_metrics['r2']:.3f} | Late Rate: {test_metrics['late_rate_gt_5min'] * 100:.1f}%")
+
     with mlflow.start_run() as run:
-        # set tags
-        mlflow.set_tag("model","Food Delivery Time Regressor")
+        mlflow.set_tag("pipeline", "deliveriq_dvc")
+        mlflow.set_tag("model_type", "stacking_regressor")
 
-        # log parameters
-        mlflow.log_params(model.get_params())
+        for k, v in train_metrics.items():
+            mlflow.log_metric(f"train_{k}", v)
+        for k, v in test_metrics.items():
+            mlflow.log_metric(f"test_{k}", v)
 
-        # log metrics
-        mlflow.log_metric("train_mae",train_mae)
-        mlflow.log_metric("test_mae",test_mae)
-        mlflow.log_metric("train_r2",train_r2)
-        mlflow.log_metric("test_r2",test_r2)
-        mlflow.log_metric("mean_cv_score",-(cv_scores.mean()))
+        # Log artifacts
+        preprocessor_path = root_path / "models" / "preprocessor.joblib"
+        if preprocessor_path.exists():
+            mlflow.log_artifact(preprocessor_path)
 
-        # log individual cv scores
-        mlflow.log_metrics({f"CV {num}": score for num, score in enumerate(-cv_scores)})
-        
-        # mlflow dataset input datatype
-        train_data_input = mlflow.data.from_pandas(train_data,targets=TARGET)
-        test_data_input = mlflow.data.from_pandas(test_data,targets=TARGET)
-        
-        # log input
-        mlflow.log_input(dataset=train_data_input,context="training")
-        mlflow.log_input(dataset=test_data_input,context="validation")
-        
-        # model signature
-        model_signature = mlflow.models.infer_signature(model_input=X_train.sample(20,random_state=42),
-                                    model_output=model.predict(X_train.sample(20,random_state=42)))
-        
-        # log the final model
-        mlflow.sklearn.log_model(model,"delivery_time_pred_model",signature=model_signature)
+        signature = mlflow.models.infer_signature(
+            model_input=X_train.sample(10, random_state=42),
+            model_output=model.predict(X_train.sample(10, random_state=42))
+        )
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="delivery_eta_model",
+            signature=signature
+        )
 
-        # log stacking regressor
-        mlflow.log_artifact(root_path / "models" / "stacking_regressor.joblib")
-        
-        # log the power transformer
-        mlflow.log_artifact(root_path / "models" / "power_transformer.joblib")
-        
-        # log the preprocessor
-        mlflow.log_artifact(root_path / "models" / "preprocessor.joblib")
-        
-        # get the current run artifact uri
-        artifact_uri = mlflow.get_artifact_uri("delivery_time_pred_model")
-        
-        logger.info("Mlflow logging complete and model logged")
-        
-    # get the run id 
-    run_id = run.info.run_id
-    model_name = "delivery_time_pred_model"
-    
-    # save the model info
-    save_json_path = root_path / "run_information.json"
-    save_model_info(save_json_path=save_json_path,
-                    run_id=run_id,
-                    artifact_path=artifact_uri,
-                    model_name=model_name)
-    logger.info("Model Information saved")
-    
-    
-    
-    
-    
+        artifact_uri = mlflow.get_artifact_uri("delivery_eta_model")
+        run_id = run.info.run_id
+
+    # Save run information for registration
+    run_info = {
+        "run_id": run_id,
+        "artifact_path": artifact_uri,
+        "model_name": "delivery_time_pred_model",
+        "metrics": test_metrics,
+    }
+
+    run_info_file = root_path / "run_information.json"
+    with open(run_info_file, "w") as f:
+        json.dump(run_info, f, indent=4)
+
+    logger.info(f"Saved run evaluation metadata to {run_info_file}")

@@ -1,34 +1,58 @@
 [project]
-name = "delivery-time-prediction"
+name = "deliveriq"
 version = "0.1.0"
-description = "Add your description here"
+description = "DeliverIQ - Resilient, Event-Driven Delivery Fulfillment Backend with Closed-Loop ML ETA Prediction"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "dagshub>=0.6.8",
-    "dvc>=3.66.1",
-    "dvc-s3>=3.3.0",
-    "fastapi[standard]>=0.135.1",
+    "dvc>=3.50.0",
+    "dvc-s3>=3.0.0",
+    "fastapi[standard]>=0.115.0",
     "folium>=0.19.0",
-    "joblib>=1.5.3",
-    "lightgbm>=4.6.0",
+    "httpx>=0.28.0",
+    "joblib>=1.4.0",
+    "lightgbm>=4.5.0",
     "mlflow>=2.14.0",
-    "numpy>=2.4.3",
+    "numpy>=1.26.0,<3.0.0",
     "pandas>=2.0.1",
-    "protobuf<4",
-    "pydantic>=2.12.5",
-    "pyyaml>=6.0.3",
-    "scikit-learn>=1.8.0",
-    "setuptools==69.5.1",
-    "streamlit>=1.40.0",
-    "streamlit-folium>=0.25.0",
-    "uvicorn>=0.41.0",
+    "protobuf<5",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "pyyaml>=6.0.1",
+    "redis>=5.0.0",
+    "scikit-learn>=1.5.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.20.0",
+    "streamlit>=1.38.0",
+    "streamlit-folium>=0.22.0",
+    "uvicorn>=0.30.0",
 ]
 
 [dependency-groups]
 dev = [
-    "flake8>=7.3.0",
-    "ipykernel>=7.2.0",
-    "notebook>=7.5.4",
-    "pytest>=9.0.2",
+    "ipykernel>=6.29.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.6.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+    "notebooks",
+    "hf_deploy",
+    ".venv",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",  # Allow broad exception handling for robust fallback/recovery logic
+    "DTZ011",  # Allow date.today() in standalone UI script
 ]

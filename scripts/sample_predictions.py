@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pandas as pd
 import requests
-from pathlib import Path
 
 # path for data
 root_path = Path(__file__).parent.parent

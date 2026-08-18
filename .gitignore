@@ -61,7 +61,20 @@ target/
 
 # Database
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 *.rdb
+
+# MLflow local runs
+mlruns/
+.trash/
+
+# Linter & test caches
+.ruff_cache/
+.pytest_cache/
 
 # Pycharm
 .idea
@@ -101,4 +114,7 @@ target/
 
 # Data files in notebooks
 notebooks/*.csv
+
+# Claude Code CLI local config & secrets
+.claude/
 

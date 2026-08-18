@@ -1,0 +1,57 @@
+services:
+  # --- Data Plane ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: deliveriq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deliveriq
+      POSTGRES_PASSWORD: deliveriq_password
+      POSTGRES_DB: deliveriq
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deliveriq"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: deliveriq-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- ML Inference Service ---
+  eta-service:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: deliveriq-eta-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: eta-service
+      PORT: 8000
+      HOST: 0.0.0.0
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

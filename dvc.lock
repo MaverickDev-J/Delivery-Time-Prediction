@@ -3,35 +3,38 @@ stages:
   data_cleaning:
     cmd: uv run python src/data/data_cleaning.py
     deps:
+    - path: contracts/features.py
+      hash: md5
+      md5: eba9052da303dfc1ae2ba47c9768a4bb
+      size: 5178
     - path: data/raw/swiggy.csv
       hash: md5
       md5: 0b050b37dfe6cfbfaa18d7cb4e454377
       size: 7772212
-      isexec: true
+    - path: scripts/data_clean_utils.py
+      hash: md5
+      md5: ac5534df2f92374095b4e0d6cd5a574b
+      size: 6189
     - path: src/data/data_cleaning.py
       hash: md5
-      md5: f5ad421aafd57c91a1366fef5b226570
-      size: 9519
-      isexec: true
+      md5: 9360dcab72c1a6afb40dc71c00fbc2d2
+      size: 1555
     outs:
     - path: data/cleaned/swiggy_cleaned.csv
       hash: md5
-      md5: 88abff5e8ddf25d6d39300c8f9b531d2
-      size: 4463050
-      isexec: true
+      md5: 33783120f18a753dd632936e54c69246
+      size: 295636
   data_preparation:
     cmd: uv run python src/data/data_preparation.py
     deps:
     - path: data/cleaned/swiggy_cleaned.csv
       hash: md5
-      md5: 88abff5e8ddf25d6d39300c8f9b531d2
-      size: 4463050
-      isexec: true
+      md5: 33783120f18a753dd632936e54c69246
+      size: 295636
     - path: src/data/data_preparation.py
       hash: md5
-      md5: 46073c9715ca04260bd1df6354f2d867
-      size: 3009
-      isexec: true
+      md5: e9637bca2abf8dddc8c8ca9e35373329
+      size: 2584
     params:
       params.yaml:
         Data_Preparation.random_state: 42
@@ -39,61 +42,59 @@ stages:
     outs:
     - path: data/interim/test.csv
       hash: md5
-      md5: c799f2b1d88b52a6479b4136d67c83af
-      size: 1115157
-      isexec: true
+      md5: 096b6a2178b3ee9ba25c9f99350b49af
+      size: 73914
     - path: data/interim/train.csv
       hash: md5
-      md5: e56b0ba586811f44d0281289341376f7
-      size: 3344933
-      isexec: true
+      md5: b6378146a6645a6322df5ca5b5ffb5fa
+      size: 221899
   data_preprocessing:
     cmd: uv run python src/features/data_preprocessing.py
     deps:
+    - path: contracts/features.py
+      hash: md5
+      md5: eba9052da303dfc1ae2ba47c9768a4bb
+      size: 5178
     - path: data/interim/test.csv
       hash: md5
-      md5: c799f2b1d88b52a6479b4136d67c83af
-      size: 1115157
-      isexec: true
+      md5: 096b6a2178b3ee9ba25c9f99350b49af
+      size: 73914
     - path: data/interim/train.csv
       hash: md5
-      md5: e56b0ba586811f44d0281289341376f7
-      size: 3344933
-      isexec: true
+      md5: b6378146a6645a6322df5ca5b5ffb5fa
+      size: 221899
     - path: src/features/data_preprocessing.py
       hash: md5
-      md5: 0d57fa9edfb286bad4167977f06a184e
-      size: 6951
-      isexec: true
+      md5: a4d3d1c92094f18a9d6b4db13f27e02c
+      size: 4108
     outs:
     - path: data/processed/test_trans.csv
       hash: md5
-      md5: 3d5c3c35af89d966922d41310d6e481d
-      size: 1348821
-      isexec: true
+      md5: b0dada81a921423eb1fd4cb5b9d5bc02
+      size: 104080
     - path: data/processed/train_trans.csv
       hash: md5
-      md5: cceb332a1cab549a0c26b40ebf1975b1
-      size: 4032189
-      isexec: true
+      md5: dc5f4a791c2faabd4d5ddc988f82dcc7
+      size: 311248
     - path: models/preprocessor.joblib
       hash: md5
-      md5: 3334ce32eb7d9dd5a820cada24326077
-      size: 7243
-      isexec: true
+      md5: e372575b78142042669ada1e3b688c48
+      size: 6614
   train:
     cmd: uv run python src/models/train.py
     deps:
+    - path: contracts/features.py
+      hash: md5
+      md5: eba9052da303dfc1ae2ba47c9768a4bb
+      size: 5178
     - path: data/processed/train_trans.csv
       hash: md5
-      md5: cceb332a1cab549a0c26b40ebf1975b1
-      size: 4032189
-      isexec: true
+      md5: dc5f4a791c2faabd4d5ddc988f82dcc7
+      size: 311248
     - path: src/models/train.py
       hash: md5
-      md5: 7e3fdfe8e1b25a08b4d2dad297d03c78
-      size: 4912
-      isexec: true
+      md5: 512d59d991afed20dc3fd4c744e7a9b0
+      size: 2952
     params:
       params.yaml:
         Train.LightGBM:
@@ -119,51 +120,57 @@ stages:
     outs:
     - path: models/model.joblib
       hash: md5
-      md5: 0660de88ce6740a9771d6e0299f82b39
-      size: 148754216
-      isexec: true
+      md5: 0fd151b494e928b7659b75ef991fe316
+      size: 14434420
     - path: models/power_transformer.joblib
       hash: md5
-      md5: 8c3329476a50e2ddf794f60de8228f75
+      md5: 3b664d27fd8ebb1842f58d8b722c35ca
       size: 805
-      isexec: true
     - path: models/stacking_regressor.joblib
       hash: md5
-      md5: 362dfe7780b30dc1bd686d8677750d19
-      size: 148742634
-      isexec: true
+      md5: b05ab7df8bb25e9905dd84168a3089fe
+      size: 14422950
   evaluation:
     cmd: uv run python src/models/evaluation.py
     deps:
+    - path: contracts/features.py
+      hash: md5
+      md5: eba9052da303dfc1ae2ba47c9768a4bb
+      size: 5178
     - path: data/processed/test_trans.csv
       hash: md5
-      md5: 3d5c3c35af89d966922d41310d6e481d
-      size: 1348821
+      md5: b0dada81a921423eb1fd4cb5b9d5bc02
+      size: 104080
     - path: data/processed/train_trans.csv
       hash: md5
-      md5: cceb332a1cab549a0c26b40ebf1975b1
-      size: 4032189
+      md5: dc5f4a791c2faabd4d5ddc988f82dcc7
+      size: 311248
     - path: models/model.joblib
       hash: md5
-      md5: 0660de88ce6740a9771d6e0299f82b39
-      size: 148754216
+      md5: 0fd151b494e928b7659b75ef991fe316
+      size: 14434420
     - path: src/models/evaluation.py
       hash: md5
-      md5: c20d5b19c3d2fced812105b87ebc2ca8
-      size: 6079
+      md5: f0b849865208dafa94ac1ed314150ed0
+      size: 4776
     outs:
     - path: run_information.json
       hash: md5
-      md5: 607a024f525b136e769a3b4e04c2a666
-      size: 245
+      md5: 90913fe29eda7c5c9c7a5c78411b5cfb
+      size: 490
   register_model:
     cmd: uv run python src/models/register_model.py
     deps:
     - path: run_information.json
       hash: md5
-      md5: 607a024f525b136e769a3b4e04c2a666
-      size: 245
+      md5: 90913fe29eda7c5c9c7a5c78411b5cfb
+      size: 490
     - path: src/models/register_model.py
       hash: md5
-      md5: 7d16afe8da6af0a42a21255009c95801
-      size: 2163
+      md5: 970626835bd9f62f69c9d8cde278e475
+      size: 2804
+    outs:
+    - path: reports/registry.json
+      hash: md5
+      md5: 3ee30251b73a76480c7cca8d50b92367
+      size: 313

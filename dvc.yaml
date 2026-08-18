@@ -4,6 +4,8 @@ stages:
     deps:
     - data/raw/swiggy.csv
     - src/data/data_cleaning.py
+    - scripts/data_clean_utils.py
+    - contracts/features.py
     outs:
     - data/cleaned/swiggy_cleaned.csv
 
@@ -25,6 +27,7 @@ stages:
     - data/interim/train.csv
     - data/interim/test.csv
     - src/features/data_preprocessing.py
+    - contracts/features.py
     outs:
     - data/processed/train_trans.csv
     - data/processed/test_trans.csv
@@ -35,6 +38,7 @@ stages:
     deps:
     - src/models/train.py
     - data/processed/train_trans.csv
+    - contracts/features.py
     params:
     - Train.Random_Forest
     - Train.LightGBM
@@ -50,6 +54,7 @@ stages:
     - data/processed/train_trans.csv
     - data/processed/test_trans.csv
     - models/model.joblib
+    - contracts/features.py
     outs:
     - run_information.json
 
@@ -58,3 +63,5 @@ stages:
     deps:
     - src/models/register_model.py
     - run_information.json
+    outs:
+    - reports/registry.json
