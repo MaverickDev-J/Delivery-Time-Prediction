@@ -79,7 +79,38 @@ class HttpEtaService:
         self.client = httpx.Client(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 
     def predict(self, order_data: dict) -> dict:
-        response = self.client.post("/predict", json=order_data)
+        # Translate saga order_data keys → ETA service OrderPredictionRequest keys
+        city_raw = order_data.get("city", "Metropolitian")
+        city_map = {
+            "Metropolitian": "metropolitan",
+            "Urban": "urban",
+            "Semi-Urban": "semi-urban",
+            "metropolitan": "metropolitan",
+            "urban": "urban",
+            "semi-urban": "semi-urban",
+        }
+
+        eta_payload = {
+            "id": order_data.get("order_id", "ORD-SAGA"),
+            "rider_id": "RIDER_DEFAULT",
+            "age": order_data.get("delivery_person_age", 28),
+            "ratings": order_data.get("delivery_person_ratings", 4.5),
+            "restaurant_latitude": order_data.get("restaurant_latitude", 12.97),
+            "restaurant_longitude": order_data.get("restaurant_longitude", 77.59),
+            "delivery_latitude": order_data.get("delivery_location_latitude", 12.93),
+            "delivery_longitude": order_data.get("delivery_location_longitude", 77.62),
+            "order_date": order_data.get("order_date", "18-08-2026"),
+            "order_time": order_data.get("time_order_picked", "19:30:00"),
+            "weather": order_data.get("weather_conditions", "sunny"),
+            "traffic": order_data.get("road_traffic_density", "medium"),
+            "vehicle_condition": order_data.get("vehicle_condition", 2),
+            "type_of_order": order_data.get("type_of_order", "meal"),
+            "type_of_vehicle": order_data.get("type_of_vehicle", "motorcycle"),
+            "festival": order_data.get("festival", "no"),
+            "city_type": city_map.get(city_raw, "metropolitan"),
+        }
+
+        response = self.client.post("/predict", json=eta_payload)
         if response.status_code >= 500:
             raise ConnectionError(f"ETA service error: {response.status_code}")
         if response.status_code >= 400:
