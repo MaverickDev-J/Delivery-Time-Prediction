@@ -1,0 +1,134 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(deliveriq_http_requests_total[1m])) by (service)",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "fillOpacity": 10}}
+      }
+    },
+    {
+      "title": "Request Latency p95 (ms)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(deliveriq_http_request_duration_seconds_bucket[5m])) by (le, service))",
+          "legendFormat": "{{service}} p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 10}}
+      }
+    },
+    {
+      "title": "Saga Outcomes (rate)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(deliveriq_saga_outcomes_total[5m])) by (outcome)",
+          "legendFormat": "{{outcome}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"custom": {"drawStyle": "bars", "fillOpacity": 50}}
+      }
+    },
+    {
+      "title": "Saga Duration (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(deliveriq_saga_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(deliveriq_saga_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 10}}
+      }
+    },
+    {
+      "title": "Outbox Pending Events",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "sum(deliveriq_outbox_pending_events) by (service)",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 10}, {"color": "red", "value": 50}]}}
+      }
+    },
+    {
+      "title": "DLQ Depth",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 16},
+      "targets": [
+        {
+          "expr": "sum(deliveriq_dlq_depth)",
+          "legendFormat": "DLQ messages"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}
+      }
+    },
+    {
+      "title": "Circuit Breaker States",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "deliveriq_circuit_breaker_state",
+          "legendFormat": "{{target_service}}",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "title": "HTTP Error Rate (4xx + 5xx)",
+      "type": "timeseries",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 16},
+      "targets": [
+        {
+          "expr": "sum(rate(deliveriq_http_requests_total{status_code=~\"4..|5..\"}[5m])) by (service)",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "color": {"mode": "palette-classic"}, "custom": {"drawStyle": "line", "fillOpacity": 20}}
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["deliveriq", "system"],
+  "templating": {"list": []},
+  "time": {"from": "now-30m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DeliverIQ — System Overview",
+  "uid": "deliveriq-system",
+  "version": 1
+}

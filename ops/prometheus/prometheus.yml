@@ -1,0 +1,37 @@
+# Prometheus configuration for DeliverIQ
+# Scrapes all microservice /metrics endpoints every 15 seconds
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "order-service"
+    static_configs:
+      - targets: ["order:8001"]
+    metrics_path: /metrics
+
+  - job_name: "payment-service"
+    static_configs:
+      - targets: ["payment:8002"]
+    metrics_path: /metrics
+
+  - job_name: "inventory-service"
+    static_configs:
+      - targets: ["inventory:8003"]
+    metrics_path: /metrics
+
+  - job_name: "orchestrator-service"
+    static_configs:
+      - targets: ["orchestrator:8004"]
+    metrics_path: /metrics
+
+  - job_name: "eta-service"
+    static_configs:
+      - targets: ["eta:8000"]
+    metrics_path: /metrics
+
+  - job_name: "monitoring-service"
+    static_configs:
+      - targets: ["monitoring:8006"]
+    metrics_path: /metrics

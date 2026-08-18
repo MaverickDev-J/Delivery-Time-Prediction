@@ -1,0 +1,13 @@
+# Auto-provision dashboards from JSON files on disk
+apiVersion: 1
+
+providers:
+  - name: "DeliverIQ"
+    orgId: 1
+    folder: "DeliverIQ"
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

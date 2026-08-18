@@ -33,6 +33,7 @@ class EventEnvelope(BaseModel):
     )
     correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Distributed trace/correlation ID")
     idempotency_key: str | None = Field(default=None, description="Idempotency key associated with the transaction")
+    traceparent: str | None = Field(default=None, description="W3C traceparent header for distributed tracing across stream hops")
     payload: dict[str, Any] = Field(default_factory=dict, description="Event specific payload")
 
     def to_stream_dict(self) -> dict[str, str]:
@@ -45,6 +46,7 @@ class EventEnvelope(BaseModel):
             "occurred_at": self.occurred_at,
             "correlation_id": self.correlation_id,
             "idempotency_key": self.idempotency_key or "",
+            "traceparent": self.traceparent or "",
             "payload": json.dumps(self.payload),
         }
 
@@ -64,5 +66,6 @@ class EventEnvelope(BaseModel):
             occurred_at=stream_dict.get("occurred_at", datetime.now(UTC).isoformat()),
             correlation_id=stream_dict.get("correlation_id", str(uuid.uuid4())),
             idempotency_key=stream_dict.get("idempotency_key") or None,
+            traceparent=stream_dict.get("traceparent") or None,
             payload=payload,
         )

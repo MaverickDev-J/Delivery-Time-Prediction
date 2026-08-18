@@ -1,0 +1,128 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Rolling MAE",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "deliveriq_rolling_mae",
+          "legendFormat": "MAE (min)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "min", "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 8}, {"color": "red", "value": 12}]}}
+      }
+    },
+    {
+      "title": "Late Rate",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "deliveriq_late_rate",
+          "legendFormat": "Late %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.15}, {"color": "red", "value": 0.25}]}}
+      }
+    },
+    {
+      "title": "Interval Coverage",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "deliveriq_interval_coverage",
+          "legendFormat": "Coverage"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "percentunit", "min": 0, "max": 1, "thresholds": {"steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.80}, {"color": "green", "value": 0.88}]}}
+      }
+    },
+    {
+      "title": "Degraded Predictions (rate)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {
+          "expr": "rate(deliveriq_eta_degraded_total[5m])",
+          "legendFormat": "Degraded/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps", "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.01}]}}
+      }
+    },
+    {
+      "title": "Feature Drift — PSI Score per Feature",
+      "type": "timeseries",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 6},
+      "targets": [
+        {
+          "expr": "deliveriq_drift_psi",
+          "legendFormat": "{{feature}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "fillOpacity": 15, "thresholdsStyle": {"mode": "dashed"}},
+          "thresholds": {"steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "red", "value": 0.2}]}
+        }
+      }
+    },
+    {
+      "title": "ETA Prediction Latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(deliveriq_eta_prediction_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(deliveriq_eta_prediction_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(deliveriq_eta_prediction_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 10}}
+      }
+    },
+    {
+      "title": "Retrain Gate Evaluations",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "sum(rate(deliveriq_retrain_gate_evaluations_total[5m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"custom": {"drawStyle": "bars", "fillOpacity": 50}}
+      }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["deliveriq", "ml-monitoring"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DeliverIQ — ML Monitoring",
+  "uid": "deliveriq-ml",
+  "version": 1
+}

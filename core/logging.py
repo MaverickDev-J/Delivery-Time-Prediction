@@ -10,6 +10,11 @@ correlation_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "correlation_id", default=None
 )
 
+# Context variable for W3C trace ID (OpenTelemetry compatible)
+trace_id_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "trace_id", default=None
+)
+
 
 def get_correlation_id() -> str | None:
     return correlation_id_ctx.get()
@@ -17,6 +22,24 @@ def get_correlation_id() -> str | None:
 
 def set_correlation_id(correlation_id: str) -> None:
     correlation_id_ctx.set(correlation_id)
+
+
+def get_trace_id() -> str | None:
+    return trace_id_ctx.get()
+
+
+def set_trace_id(trace_id: str) -> None:
+    trace_id_ctx.set(trace_id)
+
+
+def parse_traceparent(header: str | None) -> str | None:
+    """Extract trace-id from a W3C traceparent header (00-<trace_id>-<span_id>-<flags>)."""
+    if not header:
+        return None
+    parts = header.split("-")
+    if len(parts) >= 2:
+        return parts[1]
+    return None
 
 
 class JSONFormatter(logging.Formatter):
@@ -34,6 +57,7 @@ class JSONFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
             "correlation_id": get_correlation_id(),
+            "trace_id": get_trace_id(),
         }
 
         if record.exc_info:

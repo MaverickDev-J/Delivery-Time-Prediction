@@ -52,6 +52,42 @@ services:
       redis:
         condition: service_healthy
 
+  # --- Observability Stack (profile: obs) ---
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: deliveriq-prometheus
+    restart: unless-stopped
+    profiles: ["obs"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: deliveriq-grafana
+    restart: unless-stopped
+    profiles: ["obs"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: deliveriq
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
