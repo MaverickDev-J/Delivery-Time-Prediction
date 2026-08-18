@@ -25,18 +25,18 @@ class HttpPaymentService:
     def authorize(self, order_id: str, amount: float, idempotency_key: str) -> dict:
         response = self.client.post(
             "/payments/authorize",
-            json={"order_id": order_id, "amount": amount},
-            headers={"Idempotency-Key": idempotency_key},
+            json={"order_id": order_id, "amount": amount, "idempotency_key": idempotency_key},
         )
         if response.status_code >= 500:
             raise ConnectionError(f"Payment service error: {response.status_code}")
+        if response.status_code == 422:
+            raise ConnectionError(f"Payment validation error: {response.text}")
         return response.json()
 
     def refund(self, order_id: str, payment_id: str, idempotency_key: str) -> dict:
         response = self.client.post(
             "/payments/refund",
-            json={"order_id": order_id, "payment_id": payment_id},
-            headers={"Idempotency-Key": idempotency_key},
+            json={"order_id": order_id, "payment_id": payment_id, "idempotency_key": idempotency_key},
         )
         if response.status_code >= 500:
             raise ConnectionError(f"Payment service error: {response.status_code}")
@@ -53,18 +53,18 @@ class HttpInventoryService:
     def reserve(self, order_id: str, items: list[str], idempotency_key: str) -> dict:
         response = self.client.post(
             "/inventory/reserve",
-            json={"order_id": order_id, "items": items},
-            headers={"Idempotency-Key": idempotency_key},
+            json={"order_id": order_id, "items": items, "idempotency_key": idempotency_key},
         )
         if response.status_code >= 500:
             raise ConnectionError(f"Inventory service error: {response.status_code}")
+        if response.status_code == 422:
+            raise ConnectionError(f"Inventory validation error: {response.text}")
         return response.json()
 
     def release(self, order_id: str, reservation_id: str, idempotency_key: str) -> dict:
         response = self.client.post(
             "/inventory/release",
-            json={"order_id": order_id, "reservation_id": reservation_id},
-            headers={"Idempotency-Key": idempotency_key},
+            json={"order_id": order_id, "reservation_id": reservation_id, "idempotency_key": idempotency_key},
         )
         if response.status_code >= 500:
             raise ConnectionError(f"Inventory service error: {response.status_code}")

@@ -10,6 +10,7 @@ Thin client interacting with DeliverIQ microservices:
 
 import os
 import uuid
+from datetime import datetime
 
 import folium
 import httpx
@@ -84,6 +85,17 @@ div[data-testid="stButton"] > button {
     border-radius: 10px !important;
     padding: 10px 24px !important;
 }
+
+.location-badge {
+    background: #1e2235;
+    border: 1px solid #303558;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin: 4px 0;
+    font-size: 0.85rem;
+}
+.location-badge-green { border-left: 4px solid #10b981; }
+.location-badge-red   { border-left: 4px solid #ef4444; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -99,6 +111,45 @@ INVENTORY_URL = os.getenv("INVENTORY_URL", "http://localhost:8003")
 GRAFANA_URL = os.getenv("GRAFANA_URL", "http://localhost:3000")
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
 
+# ── Cached Health Checks (avoids re-calling on every rerun) ──────────────────
+@st.cache_data(ttl=30, show_spinner=False)
+def _check_all_services():
+    """Check all services once and cache for 30 seconds."""
+    services = [
+        (ORCHESTRATOR_URL, "Saga Orchestrator"),
+        (ETA_URL, "ETA Inference"),
+        (MONITORING_URL, "ML Monitoring"),
+        (ORDER_URL, "Order Service"),
+        (PAYMENT_URL, "Payment Service"),
+        (INVENTORY_URL, "Inventory Service"),
+    ]
+    results = []
+    for url, name in services:
+        try:
+            r = httpx.get(f"{url}/health", timeout=2.0)
+            if r.status_code == 200:
+                results.append((name, "up"))
+            else:
+                results.append((name, "warn"))
+        except Exception:
+            results.append((name, "down"))
+    return results
+
+# ── Session State Initialization ─────────────────────────────────────────────
+# Default Bengaluru coordinates
+if "rest_lat" not in st.session_state:
+    st.session_state.rest_lat = 12.9716
+if "rest_lon" not in st.session_state:
+    st.session_state.rest_lon = 77.5946
+if "deliv_lat" not in st.session_state:
+    st.session_state.deliv_lat = 12.9352
+if "deliv_lon" not in st.session_state:
+    st.session_state.deliv_lon = 77.6245
+if "next_click" not in st.session_state:
+    st.session_state.next_click = "restaurant"  # alternates: restaurant → delivery → restaurant ...
+if "saga_result" not in st.session_state:
+    st.session_state.saga_result = None
+
 # ── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚡ **DeliverIQ Platform**")
@@ -107,22 +158,18 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### 🔗 **Service Mesh Status**")
 
-    def check_service(url, name):
-        try:
-            r = httpx.get(f"{url}/health", timeout=1.0)
-            if r.status_code == 200:
-                st.success(f"🟢 **{name}** (UP)")
-            else:
-                st.warning(f"🟡 **{name}** ({r.status_code})")
-        except Exception:
+    service_statuses = _check_all_services()
+    for name, status in service_statuses:
+        if status == "up":
+            st.success(f"🟢 **{name}** (UP)")
+        elif status == "warn":
+            st.warning(f"🟡 **{name}** (Degraded)")
+        else:
             st.error(f"🔴 **{name}** (Offline)")
 
-    check_service(ORCHESTRATOR_URL, "Saga Orchestrator")
-    check_service(ETA_URL, "ETA Inference")
-    check_service(MONITORING_URL, "ML Monitoring")
-    check_service(ORDER_URL, "Order Service")
-    check_service(PAYMENT_URL, "Payment Service")
-    check_service(INVENTORY_URL, "Inventory Service")
+    if st.button("🔄 Refresh Status", use_container_width=True, key="refresh_health"):
+        _check_all_services.clear()
+        st.rerun()
 
     st.markdown("---")
     st.markdown("#### 📊 **Dashboards**")
@@ -176,18 +223,82 @@ with tab1:
 
     with col_map:
         st.markdown("### 🗺️ **Interactive Route Selection**")
-        st.caption("Click on the map to set restaurant (green) & delivery (red) locations.")
+        st.caption(
+            "**How to use:** Click on the map to set locations. "
+            "Clicks alternate between 🟢 Restaurant and 🔴 Delivery."
+        )
 
-        # Default Bengaluru coordinates
-        rest_lat, rest_lon = 12.9716, 77.5946
-        deliv_lat, deliv_lon = 12.9352, 77.6245
+        # Show current coordinates
+        next_label = "🟢 Restaurant" if st.session_state.next_click == "restaurant" else "🔴 Delivery"
+        st.info(f"**Next click sets:** {next_label} location")
 
-        m = folium.Map(location=[12.95, 77.60], zoom_start=12, tiles="CartoDB dark_matter")
-        folium.Marker([rest_lat, rest_lon], tooltip="Restaurant", icon=folium.Icon(color="green", icon="cutlery")).add_to(m)
-        folium.Marker([deliv_lat, deliv_lon], tooltip="Customer Location", icon=folium.Icon(color="red", icon="home")).add_to(m)
-        folium.PolyLine([(rest_lat, rest_lon), (deliv_lat, deliv_lon)], color="#6366f1", weight=3, dash_array="6").add_to(m)
+        col_loc1, col_loc2 = st.columns(2)
+        with col_loc1:
+            st.markdown(
+                f'<div class="location-badge location-badge-green">'
+                f'🟢 Restaurant: {st.session_state.rest_lat:.4f}, {st.session_state.rest_lon:.4f}</div>',
+                unsafe_allow_html=True,
+            )
+        with col_loc2:
+            st.markdown(
+                f'<div class="location-badge location-badge-red">'
+                f'🔴 Delivery: {st.session_state.deliv_lat:.4f}, {st.session_state.deliv_lon:.4f}</div>',
+                unsafe_allow_html=True,
+            )
 
-        st_folium(m, height=340, width=None)
+        # Reset button
+        if st.button("🔄 Reset to Default (Bengaluru)", key="reset_map"):
+            st.session_state.rest_lat = 12.9716
+            st.session_state.rest_lon = 77.5946
+            st.session_state.deliv_lat = 12.9352
+            st.session_state.deliv_lon = 77.6245
+            st.session_state.next_click = "restaurant"
+            st.rerun()
+
+        # Build map with current locations
+        center_lat = (st.session_state.rest_lat + st.session_state.deliv_lat) / 2
+        center_lon = (st.session_state.rest_lon + st.session_state.deliv_lon) / 2
+
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=12, tiles="CartoDB dark_matter")
+        folium.Marker(
+            [st.session_state.rest_lat, st.session_state.rest_lon],
+            tooltip="🟢 Restaurant (click map to change)",
+            icon=folium.Icon(color="green", icon="cutlery"),
+        ).add_to(m)
+        folium.Marker(
+            [st.session_state.deliv_lat, st.session_state.deliv_lon],
+            tooltip="🔴 Customer Location (click map to change)",
+            icon=folium.Icon(color="red", icon="home"),
+        ).add_to(m)
+        folium.PolyLine(
+            [(st.session_state.rest_lat, st.session_state.rest_lon),
+             (st.session_state.deliv_lat, st.session_state.deliv_lon)],
+            color="#6366f1", weight=3, dash_array="6",
+        ).add_to(m)
+
+        # Render map and capture click data
+        map_data = st_folium(m, height=340, width=None, key="main_map")
+
+        # Process map click
+        if map_data and map_data.get("last_clicked"):
+            clicked_lat = map_data["last_clicked"]["lat"]
+            clicked_lon = map_data["last_clicked"]["lng"]
+
+            if st.session_state.next_click == "restaurant":
+                # Only update if location actually changed
+                if (abs(clicked_lat - st.session_state.rest_lat) > 0.0001
+                        or abs(clicked_lon - st.session_state.rest_lon) > 0.0001):
+                    st.session_state.rest_lat = clicked_lat
+                    st.session_state.rest_lon = clicked_lon
+                    st.session_state.next_click = "delivery"
+                    st.rerun()
+            else:
+                if (abs(clicked_lat - st.session_state.deliv_lat) > 0.0001
+                        or abs(clicked_lon - st.session_state.deliv_lon) > 0.0001):
+                    st.session_state.deliv_lat = clicked_lat
+                    st.session_state.deliv_lon = clicked_lon
+                    st.session_state.next_click = "restaurant"
+                    st.rerun()
 
     # ── Order Submission & Saga Execution ────────────────────────────────────
     if place_btn:
@@ -199,12 +310,12 @@ with tab1:
         order_data = {
             "delivery_person_age": rider_age,
             "delivery_person_ratings": rider_rating,
-            "restaurant_latitude": rest_lat,
-            "restaurant_longitude": rest_lon,
-            "delivery_location_latitude": deliv_lat,
-            "delivery_location_longitude": deliv_lon,
-            "order_date": "2026-08-18",
-            "time_order_picked": "19:30:00",
+            "restaurant_latitude": st.session_state.rest_lat,
+            "restaurant_longitude": st.session_state.rest_lon,
+            "delivery_location_latitude": st.session_state.deliv_lat,
+            "delivery_location_longitude": st.session_state.deliv_lon,
+            "order_date": datetime.now().strftime("%Y-%m-%d"),
+            "time_order_picked": datetime.now().strftime("%H:%M:%S"),
             "weather_conditions": weather,
             "road_traffic_density": traffic,
             "vehicle_condition": 2,
@@ -228,7 +339,9 @@ with tab1:
 
                 if response.status_code == 200:
                     result = response.json()
-                    final_state = result.get("final_state", "UNKNOWN")
+                    st.session_state.saga_result = result
+                    st.session_state.saga_result["_order_id"] = order_id
+                    final_state = result.get("state", "UNKNOWN")
 
                     c1, c2, c3, c4 = st.columns(4)
                     with c1:
@@ -254,13 +367,46 @@ with tab1:
             except Exception as e:
                 st.error(f"Failed to communicate with Saga Orchestrator: {e}")
 
+    # Show last saga result if available (persists across reruns)
+    elif st.session_state.saga_result:
+        result = st.session_state.saga_result
+        order_id = result.get("_order_id", "N/A")
+        final_state = result.get("state", "UNKNOWN")
+
+        st.markdown("---")
+        st.markdown(f"### 📋 **Last Saga Result** — `{order_id}`")
+
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Final State", final_state)
+        with c2:
+            eta_val = result.get("eta_minutes")
+            st.metric("Predicted ETA", f"{eta_val:.1f} min" if eta_val else "N/A")
+        with c3:
+            st.metric("Payment ID", result.get("payment_id") or "N/A")
+        with c4:
+            st.metric("Reservation ID", result.get("reservation_id") or "N/A")
+
+        if final_state == "CONFIRMED":
+            st.success(f"🎉 Order **{order_id}** confirmed!")
+        elif final_state == "CONFIRMED_DEGRADED":
+            st.warning(f"⚠️ Order **{order_id}** confirmed (degraded mode).")
+        elif final_state == "CANCELLED":
+            st.error(f"❌ Order **{order_id}** cancelled. Reason: {result.get('error_reason')}")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2: Saga Audit Logs
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
     st.markdown("### 🔍 **Query Saga Lifecycle**")
-    lookup_id = st.text_input("Enter Order ID (e.g. ORD-1234ABCD)", value="")
+
+    # Pre-fill with last order ID if available
+    default_lookup = ""
+    if st.session_state.saga_result:
+        default_lookup = st.session_state.saga_result.get("_order_id", "")
+
+    lookup_id = st.text_input("Enter Order ID (e.g. ORD-1234ABCD)", value=default_lookup)
 
     if st.button("Fetch Saga State"):
         if lookup_id:
