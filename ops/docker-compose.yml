@@ -34,6 +34,102 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- Microservices (DB-per-service + Saga Orchestration) ---
+  order-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.order.app:app
+        SERVICE_PORT: 8001
+    container_name: deliveriq-order-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: order-service
+      ORDERS_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/orders_db
+      REDIS_URL: redis://redis:6379/0
+      PORT: 8001
+      HOST: 0.0.0.0
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  payment-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.payment.app:app
+        SERVICE_PORT: 8002
+    container_name: deliveriq-payment-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: payment-service
+      PAYMENTS_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/payments_db
+      PAYMENT_FAIL_RATE: "0.0"
+      PAYMENT_LATENCY_MS: "0"
+      PORT: 8002
+      HOST: 0.0.0.0
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  inventory-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.inventory.app:app
+        SERVICE_PORT: 8003
+    container_name: deliveriq-inventory-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: inventory-service
+      INVENTORY_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/inventory_db
+      PORT: 8003
+      HOST: 0.0.0.0
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  orchestrator-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.orchestrator.app:app
+        SERVICE_PORT: 8004
+    container_name: deliveriq-orchestrator-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: orchestrator-service
+      SAGA_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/saga_db
+      PAYMENT_SERVICE_URL: http://payment-service:8002
+      INVENTORY_SERVICE_URL: http://inventory-service:8003
+      ETA_SERVICE_URL: http://eta-service:8000
+      ORDER_SERVICE_URL: http://order-service:8001
+      PORT: 8004
+      HOST: 0.0.0.0
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      payment-service:
+        condition: service_started
+      inventory-service:
+        condition: service_started
+      eta-service:
+        condition: service_started
+
   # --- ML Inference Service ---
   eta-service:
     build:
@@ -48,6 +144,48 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- ML Monitoring Service ---
+  monitoring-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.monitoring.app:app
+        SERVICE_PORT: 8006
+    container_name: deliveriq-monitoring-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: monitoring-service
+      MONITORING_DB_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/monitoring_db
+      PORT: 8006
+      HOST: 0.0.0.0
+    ports:
+      - "8006:8006"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Notifier Stream Consumer ---
+  notifier-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.notifier.app:app
+        SERVICE_PORT: 8007
+    container_name: deliveriq-notifier-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: notifier-service
+      PORT: 8007
+      HOST: 0.0.0.0
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8007:8007"
     depends_on:
       redis:
         condition: service_healthy

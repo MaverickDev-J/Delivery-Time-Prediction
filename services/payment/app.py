@@ -23,6 +23,7 @@ from contracts.payment import (
 from core.database import Base, create_db_engine, create_session_factory, get_session, init_tables
 from core.idempotency import IdempotencyStore
 from core.logging import setup_logger
+from core.metrics import add_metrics_middleware, expose_metrics
 
 logger = setup_logger("payment-service", service_name="payment-service")
 
@@ -60,6 +61,8 @@ LATENCY_MS = int(os.getenv("PAYMENT_LATENCY_MS", "0"))
 ALWAYS_FAIL_OVER = float(os.getenv("PAYMENT_ALWAYS_FAIL_OVER", "999999"))
 
 app = FastAPI(title="DeliverIQ Payment Service", version="1.0.0")
+add_metrics_middleware(app, service_name="payment")
+expose_metrics(app)
 
 
 @app.get("/health")

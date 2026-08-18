@@ -21,6 +21,7 @@ from contracts.inventory import (
 from core.database import Base, create_db_engine, create_session_factory, get_session, init_tables
 from core.idempotency import IdempotencyStore
 from core.logging import setup_logger
+from core.metrics import add_metrics_middleware, expose_metrics
 
 logger = setup_logger("inventory-service", service_name="inventory-service")
 
@@ -67,6 +68,8 @@ with get_session(SessionFactory) as session:
 idem_store = IdempotencyStore()
 
 app = FastAPI(title="DeliverIQ Inventory Service", version="1.0.0")
+add_metrics_middleware(app, service_name="inventory")
+expose_metrics(app)
 
 
 @app.get("/health")

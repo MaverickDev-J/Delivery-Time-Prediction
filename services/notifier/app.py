@@ -70,3 +70,26 @@ class NotifierService:
         """Reset state — useful in tests."""
         self._processed_events.clear()
         self._notifications.clear()
+
+
+# Standalone FastAPI service
+from fastapi import FastAPI
+
+from core.metrics import add_metrics_middleware, expose_metrics
+
+service = NotifierService()
+
+app = FastAPI(title="DeliverIQ Notifier Service", version="1.0.0")
+add_metrics_middleware(app, service_name="notifier")
+expose_metrics(app)
+
+
+@app.get("/health")
+def health():
+    return {"status": "UP", "service": "notifier", "processed_events": service.processed_count}
+
+
+@app.get("/notifications")
+def get_notifications():
+    return {"notifications": service.notifications}
+

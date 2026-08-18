@@ -49,6 +49,11 @@ def create_app(
     # Exception Handlers
     register_exception_handlers(app)
 
+    # Prometheus metrics
+    from core.metrics import add_metrics_middleware, expose_metrics
+    add_metrics_middleware(app, service_name=settings.service_name)
+    expose_metrics(app)
+
     # Standard liveness probe
     @app.get("/health", tags=["Health"])
     async def health():

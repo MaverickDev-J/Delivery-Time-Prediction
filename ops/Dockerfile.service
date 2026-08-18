@@ -1,0 +1,42 @@
+# Shared Dockerfile for DeliverIQ microservices
+# Each service is a FastAPI app in services/<name>/app.py
+# Usage: docker build --build-arg SERVICE_MODULE=services.order.app:app -f ops/Dockerfile.service .
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN useradd -m -u 1000 appuser
+
+# Copy dependency specs first for layer caching
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# Copy shared packages and all services
+COPY contracts/ ./contracts/
+COPY core/ ./core/
+COPY services/ ./services/
+
+# Create data directory for SQLite fallback
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
+
+USER appuser
+
+# SERVICE_MODULE is set per-service via docker-compose
+ARG SERVICE_MODULE=services.order.app:app
+ENV SERVICE_MODULE=${SERVICE_MODULE}
+
+ARG SERVICE_PORT=8000
+ENV SERVICE_PORT=${SERVICE_PORT}
+
+EXPOSE ${SERVICE_PORT}
+
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
+  CMD curl -f http://localhost:${SERVICE_PORT}/health || exit 1
+
+CMD uv run uvicorn ${SERVICE_MODULE} --host 0.0.0.0 --port ${SERVICE_PORT}

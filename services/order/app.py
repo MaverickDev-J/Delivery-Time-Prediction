@@ -18,6 +18,7 @@ from contracts.order import CreateOrderRequest, OrderResponse, OrderStatus
 from core.database import Base, create_db_engine, create_session_factory, get_session, init_tables
 from core.idempotency import IdempotencyStore
 from core.logging import setup_logger
+from core.metrics import add_metrics_middleware, expose_metrics
 from core.outbox import write_outbox_event
 
 logger = setup_logger("order-service", service_name="order-service")
@@ -38,6 +39,8 @@ idem_store = IdempotencyStore()
 
 # FastAPI app
 app = FastAPI(title="DeliverIQ Order Service", version="1.0.0")
+add_metrics_middleware(app, service_name="order")
+expose_metrics(app)
 
 
 @app.get("/health")

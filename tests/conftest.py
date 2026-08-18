@@ -8,11 +8,11 @@ Provides global fixtures for ETA service testing.
 
 import glob
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app import app
-
 
 DB_PATTERNS = [
     "data/orders.db*",
