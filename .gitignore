@@ -115,6 +115,11 @@ mlruns/
 # Data files in notebooks
 notebooks/*.csv
 
+# Project planning & scratch files
+plan.md
+TODO.md
+notes.md
+
 # Claude Code CLI local config & secrets
 .claude/
 claude_run/.claude/
