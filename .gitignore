@@ -119,6 +119,7 @@ notebooks/*.csv
 plan.md
 TODO.md
 notes.md
+docs/
 
 # Claude Code CLI local config & secrets
 .claude/
