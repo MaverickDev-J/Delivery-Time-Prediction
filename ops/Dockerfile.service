@@ -21,6 +21,7 @@ RUN uv sync --frozen --no-dev
 COPY --chown=appuser:appuser contracts/ ./contracts/
 COPY --chown=appuser:appuser core/ ./core/
 COPY --chown=appuser:appuser services/ ./services/
+COPY --chown=appuser:appuser ops_console/ ./ops_console/
 
 # Create data directory for SQLite fallback
 RUN mkdir -p /app/data && chown -R appuser:appuser /app/data

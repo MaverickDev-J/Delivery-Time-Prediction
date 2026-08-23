@@ -70,6 +70,20 @@ def health():
     return {"status": "UP", "service": "payment-service"}
 
 
+@app.post("/config/latency")
+def set_latency(data: dict):
+    global LATENCY_MS
+    LATENCY_MS = int(data.get("latency_ms", 0))
+    return {"latency_ms": LATENCY_MS}
+
+
+@app.post("/config/fail-rate")
+def set_fail_rate(data: dict):
+    global FAIL_RATE
+    FAIL_RATE = float(data.get("rate", 0.0))
+    return {"fail_rate": FAIL_RATE}
+
+
 @app.post("/payments/authorize", response_model=PaymentResponse)
 def authorize_payment(request: AuthorizePaymentRequest):
     """Authorize a payment. Idempotent by idempotency_key."""

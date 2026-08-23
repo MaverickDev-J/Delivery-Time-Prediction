@@ -58,6 +58,50 @@ services:
       redis:
         condition: service_healthy
 
+  # --- Auth Service (JWT + bcrypt + RBAC) ---
+  auth-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.auth.app:app
+        SERVICE_PORT: 8005
+    container_name: deliveriq-auth-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: auth-service
+      AUTH_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/auth_db
+      JWT_SECRET_KEY: deliveriq-jwt-secret-change-in-production
+      PORT: 8005
+      HOST: 0.0.0.0
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Webhook Service (subscriptions, HMAC-signed delivery, retry) ---
+  webhook-service:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: services.webhook.app:app
+        SERVICE_PORT: 8009
+    container_name: deliveriq-webhook-service
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: webhook-service
+      WEBHOOK_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/webhook_db
+      JWT_SECRET_KEY: deliveriq-jwt-secret-change-in-production
+      PORT: 8009
+      HOST: 0.0.0.0
+    ports:
+      - "8009:8009"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   payment-service:
     build:
       context: ..
@@ -187,6 +231,38 @@ services:
     ports:
       - "8007:8007"
     depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- Ops Console (admin dashboard — makes everything visible) ---
+  ops-console:
+    build:
+      context: ..
+      dockerfile: ops/Dockerfile.service
+      args:
+        SERVICE_MODULE: ops_console.app:app
+        SERVICE_PORT: 8008
+    container_name: deliveriq-ops-console
+    restart: unless-stopped
+    environment:
+      SERVICE_NAME: ops-console
+      SAGA_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/saga_db
+      ORDERS_DATABASE_URL: postgresql://deliveriq:deliveriq_password@postgres:5432/orders_db
+      REDIS_URL: redis://redis:6379/0
+      ORDER_SERVICE_URL: http://order-service:8001
+      PAYMENT_SERVICE_URL: http://payment-service:8002
+      INVENTORY_SERVICE_URL: http://inventory-service:8003
+      ORCHESTRATOR_SERVICE_URL: http://orchestrator-service:8004
+      AUTH_SERVICE_URL: http://auth-service:8005
+      ETA_SERVICE_URL: http://eta-service:8000
+      MONITORING_SERVICE_URL: http://monitoring-service:8006
+      PORT: 8008
+      HOST: 0.0.0.0
+    ports:
+      - "8008:8008"
+    depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
 

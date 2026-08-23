@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Chaos Panel — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>💥 Chaos Engineering Panel</h2>
+    <span class="badge">Live Controls</span>
+</div>
+
+<p class="text-sm text-muted mb-4">
+    Inject failures into services in real-time. Toggle chaos, place orders from the Customer App,
+    and watch the saga compensate. This is how you demo resilience patterns in 60 seconds.
+</p>
+
+<div class="grid-2">
+    <!-- Payment Failure Rate -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">🔴 Payment Failure Rate</span>
+            <span id="payment-rate-display" style="font-weight:700; color:var(--red);">{{ payment_fail_rate }}%</span>
+        </div>
+        <form hx-post="/ops/api/chaos/payment-fail-rate" hx-target="#payment-rate-result" hx-swap="innerHTML">
+            <input type="range" name="rate" min="0" max="100" value="{{ payment_fail_rate }}"
+                   oninput="document.getElementById('payment-rate-display').textContent = this.value + '%'">
+            <div class="slider-label"><span>0%</span><span>100%</span></div>
+            <button type="submit" class="btn btn-primary btn-sm mt-4">Apply</button>
+        </form>
+        <div id="payment-rate-result" class="mt-4"></div>
+    </div>
+
+    <!-- Payment Latency -->
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">🟡 Payment Latency</span>
+            <span id="payment-latency-display" style="font-weight:700; color:var(--yellow);">{{ payment_latency_ms }}ms</span>
+        </div>
+        <form hx-post="/ops/api/chaos/payment-latency" hx-target="#payment-latency-result" hx-swap="innerHTML">
+            <input type="range" name="latency" min="0" max="5000" step="100" value="{{ payment_latency_ms }}"
+                   oninput="document.getElementById('payment-latency-display').textContent = this.value + 'ms'">
+            <div class="slider-label"><span>0ms</span><span>5000ms</span></div>
+            <button type="submit" class="btn btn-primary btn-sm mt-4">Apply</button>
+        </form>
+        <div id="payment-latency-result" class="mt-4"></div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card mt-4">
+    <div class="card-header">
+        <span class="card-title">⚡ Quick Actions</span>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+        <button class="btn" style="background:#10b981; color:white; font-weight:600;"
+                hx-post="/ops/api/chaos/reset-all"
+                hx-target="#quick-result"
+                hx-swap="innerHTML">
+            🟢 Reset Everything to Normal (0% Fail / 0ms)
+        </button>
+        <button class="btn btn-danger"
+                hx-post="/ops/api/chaos/payment-fail-rate"
+                hx-vals='{"rate": "100"}'
+                hx-target="#quick-result"
+                hx-swap="innerHTML">
+            💀 Kill All Payments
+        </button>
+        <button class="btn"
+                hx-post="/ops/api/chaos/payment-fail-rate"
+                hx-vals='{"rate": "50"}'
+                hx-target="#quick-result"
+                hx-swap="innerHTML">
+            🎲 50% Failures
+        </button>
+        <button class="btn"
+                hx-post="/ops/api/chaos/payment-latency"
+                hx-vals='{"latency": "3000"}'
+                hx-target="#quick-result"
+                hx-swap="innerHTML">
+            🐌 3s Latency
+        </button>
+    </div>
+    <div id="quick-result" class="mt-4"></div>
+</div>
+
+<!-- Flash Sale Concurrency Arena -->
+<div class="card mt-4" style="border-left: 4px solid #6366f1;">
+    <div class="card-header">
+        <span class="card-title">⚡ High-Concurrency Flash Sale Arena</span>
+        <span class="badge" style="background:#6366f1; color:white;">Race Condition Proof</span>
+    </div>
+    <p class="text-sm text-muted">
+        Simulates <strong>20 parallel users</strong> hitting the Inventory service at the exact same millisecond racing for <strong>1 remaining item</strong> (Stock = 1).
+        Proves optimistic locking and verifies that final database stock never goes below 0.
+    </p>
+    <button class="btn btn-primary"
+            hx-post="/ops/api/chaos/flash-sale-race"
+            hx-target="#race-report"
+            hx-indicator="#race-spinner"
+            hx-swap="innerHTML">
+        🚀 Launch 20-User Flash Sale Race
+    </button>
+    <span id="race-spinner" class="htmx-indicator text-sm text-muted" style="margin-left: 12px;">Firing 20 simultaneous threads...</span>
+    <div id="race-report"></div>
+</div>
+
+<!-- Live Counters -->
+<div class="card mt-4">
+    <div class="card-header">
+        <span class="card-title">📊 Live Saga Outcomes</span>
+        <span class="text-muted text-sm">Auto-refreshes every 3s</span>
+    </div>
+    <div hx-get="/ops/api/saga-counts" hx-trigger="load, every 3s" hx-swap="innerHTML">
+        <p class="text-muted">Loading counters...</p>
+    </div>
+</div>
+{% endblock %}
+

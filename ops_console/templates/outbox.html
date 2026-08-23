@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Outbox Monitor — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>📤 Outbox Monitor</h2>
+    <span class="badge">Transactional Outbox Pattern</span>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">How the Outbox Pattern Works</span>
+    </div>
+    <p class="text-sm text-muted" style="margin-bottom:12px;">
+        When an order is created, the order row AND the event are written in <strong>one database transaction</strong>.
+        A background relay picks up unpublished events and publishes them to Redis Streams.
+        This prevents the <strong>dual-write problem</strong>: if the app crashes after writing to the DB but before
+        publishing to the queue, the event would be lost. The outbox guarantees at-least-once delivery.
+    </p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Outbox Entries</span>
+        <button class="btn btn-sm btn-primary" hx-get="/ops/api/outbox" hx-target="#outbox-table" hx-swap="innerHTML">
+            🔄 Refresh
+        </button>
+    </div>
+    <div id="outbox-table" hx-get="/ops/api/outbox" hx-trigger="load, every 5s" hx-swap="innerHTML">
+        <p class="text-muted text-sm" style="text-align:center; padding:40px;">Loading...</p>
+    </div>
+</div>
+{% endblock %}

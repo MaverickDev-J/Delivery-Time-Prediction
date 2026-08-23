@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Saga Explorer — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>🔄 Saga Explorer</h2>
+    <span class="badge">{{ sagas|length }} sagas</span>
+</div>
+
+<!-- Filter bar -->
+<div class="card" style="padding: 12px 20px; margin-bottom: 16px;">
+    <form hx-get="/ops/sagas" hx-target="#saga-table" hx-swap="outerHTML" style="display:flex; gap:12px; align-items:center;">
+        <select name="state" class="btn" style="appearance: auto;">
+            <option value="">All States</option>
+            <option value="CONFIRMED" {% if filter_state == 'CONFIRMED' %}selected{% endif %}>✅ Confirmed</option>
+            <option value="CONFIRMED_DEGRADED" {% if filter_state == 'CONFIRMED_DEGRADED' %}selected{% endif %}>⚠️ Degraded</option>
+            <option value="CANCELLED" {% if filter_state == 'CANCELLED' %}selected{% endif %}>❌ Cancelled</option>
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+    </form>
+</div>
+
+<!-- Saga table -->
+<div class="card" id="saga-table">
+    <table>
+        <thead>
+            <tr>
+                <th>Saga ID</th>
+                <th>Order ID</th>
+                <th>State</th>
+                <th>Payment</th>
+                <th>ETA</th>
+                <th>Started</th>
+                <th>Duration</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in sagas %}
+            <tr>
+                <td class="text-mono" style="font-size:0.75rem;">{{ s.saga_id }}</td>
+                <td class="text-mono">{{ s.order_id }}</td>
+                <td>
+                    {% if 'CONFIRMED' in s.current_state and 'DEGRADED' not in s.current_state %}
+                        <span class="status status-confirmed">{{ s.current_state }}</span>
+                    {% elif 'DEGRADED' in s.current_state %}
+                        <span class="status status-degraded">{{ s.current_state }}</span>
+                    {% elif 'CANCELLED' in s.current_state or 'FAILED' in s.current_state %}
+                        <span class="status status-cancelled">{{ s.current_state }}</span>
+                    {% else %}
+                        <span class="status status-pending">{{ s.current_state }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-mono" style="font-size:0.75rem;">{{ s.payment_id or '—' }}</td>
+                <td>
+                    {% if s.eta_minutes %}
+                        {{ "%.0f"|format(s.eta_minutes) }}min
+                        {% if s.degraded %}<span style="color:var(--yellow)">⚠</span>{% endif %}
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td class="text-sm text-muted">{{ s.started_at.strftime('%H:%M:%S') if s.started_at else '—' }}</td>
+                <td class="text-sm text-muted">{{ s.duration or '—' }}</td>
+                <td>
+                    <a href="/ops/saga/{{ s.order_id }}" class="btn btn-sm">Timeline →</a>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not sagas %}
+            <tr>
+                <td colspan="8" class="text-muted" style="text-align:center; padding:40px;">
+                    No sagas found. Place an order from the Customer App to create one.
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

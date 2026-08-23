@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Idempotency Workbench — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>🔑 Idempotency Workbench</h2>
+    <span class="badge">Developer Console</span>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Interactive Idempotency Tester</span>
+    </div>
+    <p class="text-sm text-muted" style="margin-bottom:16px;">
+        Test duplicate request safety in real time against the live <code>order-service</code>. 
+        You can test with custom keys or run the automated duplicate comparison.
+    </p>
+
+    <form hx-post="/ops/api/idempotency-custom" hx-target="#demo-result" hx-indicator="#demo-spinner" style="display:flex; flex-direction:column; gap:12px;">
+        <div class="grid-2">
+            <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Idempotency Key Header</label>
+                <input type="text" name="idempotency_key" id="idem-key-input" value="idem_demo_9824" 
+                       style="width:100%; padding:8px 12px; background:var(--bg-main); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:monospace;">
+            </div>
+            <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Customer ID</label>
+                <input type="text" name="customer_id" value="CUST-BENGALURU-88" 
+                       style="width:100%; padding:8px 12px; background:var(--bg-main); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            </div>
+        </div>
+        <div class="grid-2">
+            <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Restaurant & Items</label>
+                <input type="text" name="restaurant_id" value="REST-MEGHANA-FOODS" 
+                       style="width:100%; padding:8px 12px; background:var(--bg-main); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            </div>
+            <div>
+                <label style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Total Amount (₹)</label>
+                <input type="number" name="total_amount" value="450.0" 
+                       style="width:100%; padding:8px 12px; background:var(--bg-main); border:1px solid var(--border); border-radius:6px; color:var(--text);">
+            </div>
+        </div>
+
+        <div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
+            <button type="submit" class="btn btn-primary">
+                ⚡ Fire Duplicate Requests (Test Idempotency)
+            </button>
+            <button type="button" class="btn btn-sm" onclick="document.getElementById('idem-key-input').value = 'idem_' + Math.random().toString(36).substring(2, 10);">
+                🎲 Generate New Key
+            </button>
+            <span id="demo-spinner" class="htmx-indicator" style="color:var(--text-muted); font-size:0.85rem;">
+                Executing network requests...
+            </span>
+        </div>
+    </form>
+</div>
+
+<div id="demo-result" class="mt-4">
+    <!-- Live comparison and terminal curl commands will render here -->
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <span class="card-title">💻 Run from Real Terminal (Live cURL)</span>
+    </div>
+    <p class="text-sm text-muted" style="margin-bottom:8px;">
+        You can also demonstrate this directly to an interviewer from PowerShell or Bash. Run this command twice in a row:
+    </p>
+    <div class="code-block" style="background:#090b11; padding:12px; border-radius:6px; font-family:monospace; font-size:0.8rem; color:#818cf8; overflow-x:auto;">
+curl -X POST http://localhost:8001/orders \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-H "Idempotency-Key: test-key-123" \<br>
+&nbsp;&nbsp;-d '{"customer_id": "USER-1", "restaurant_id": "REST-1", "items": ["ITEM-1"], "total_amount": 450.0}'
+    </div>
+    <p class="text-sm text-muted mt-2">
+        Notice that both calls return the <strong>exact same order ID</strong> and only <strong>1 record</strong> is created in PostgreSQL.
+    </p>
+</div>
+{% endblock %}
+

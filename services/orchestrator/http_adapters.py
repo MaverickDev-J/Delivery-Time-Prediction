@@ -18,7 +18,7 @@ DEFAULT_TIMEOUT = 10.0
 class HttpPaymentService:
     """Calls Payment Service over HTTP."""
 
-    def __init__(self, base_url: str = "http://payment:8002"):
+    def __init__(self, base_url: str = "http://payment-service:8002"):
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 
@@ -46,7 +46,7 @@ class HttpPaymentService:
 class HttpInventoryService:
     """Calls Inventory Service over HTTP."""
 
-    def __init__(self, base_url: str = "http://inventory:8003"):
+    def __init__(self, base_url: str = "http://inventory-service:8003"):
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 
@@ -74,13 +74,13 @@ class HttpInventoryService:
 class HttpEtaService:
     """Calls ETA Service over HTTP."""
 
-    def __init__(self, base_url: str = "http://eta:8000"):
+    def __init__(self, base_url: str = "http://eta-service:8000"):
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 
     def predict(self, order_data: dict) -> dict:
         # Translate saga order_data keys → ETA service OrderPredictionRequest keys
-        city_raw = order_data.get("city", "Metropolitian")
+        city_raw = order_data.get("city") or order_data.get("city_type", "metropolitan")
         city_map = {
             "Metropolitian": "metropolitan",
             "Urban": "urban",
@@ -91,22 +91,22 @@ class HttpEtaService:
         }
 
         eta_payload = {
-            "id": order_data.get("order_id", "ORD-SAGA"),
+            "id": str(order_data.get("order_id", "ORD-SAGA")),
             "rider_id": "RIDER_DEFAULT",
-            "age": order_data.get("delivery_person_age", 28),
-            "ratings": order_data.get("delivery_person_ratings", 4.5),
-            "restaurant_latitude": order_data.get("restaurant_latitude", 12.97),
-            "restaurant_longitude": order_data.get("restaurant_longitude", 77.59),
-            "delivery_latitude": order_data.get("delivery_location_latitude", 12.93),
-            "delivery_longitude": order_data.get("delivery_location_longitude", 77.62),
-            "order_date": order_data.get("order_date", "18-08-2026"),
-            "order_time": order_data.get("time_order_picked", "19:30:00"),
-            "weather": order_data.get("weather_conditions", "sunny"),
-            "traffic": order_data.get("road_traffic_density", "medium"),
-            "vehicle_condition": order_data.get("vehicle_condition", 2),
-            "type_of_order": order_data.get("type_of_order", "meal"),
-            "type_of_vehicle": order_data.get("type_of_vehicle", "motorcycle"),
-            "festival": order_data.get("festival", "no"),
+            "age": float(order_data.get("delivery_person_age", 28)),
+            "ratings": float(order_data.get("delivery_person_ratings", 4.5)),
+            "restaurant_latitude": float(order_data.get("restaurant_latitude", 12.97)),
+            "restaurant_longitude": float(order_data.get("restaurant_longitude", 77.59)),
+            "delivery_latitude": float(order_data.get("delivery_location_latitude", 12.93)),
+            "delivery_longitude": float(order_data.get("delivery_location_longitude", 77.62)),
+            "order_date": str(order_data.get("order_date", "2026-08-20")),
+            "order_time": str(order_data.get("time_order_picked", "19:30:00")),
+            "weather": str(order_data.get("weather_conditions", "sunny")).lower(),
+            "traffic": str(order_data.get("road_traffic_density", "medium")).lower(),
+            "vehicle_condition": int(order_data.get("vehicle_condition", 2)),
+            "type_of_order": str(order_data.get("type_of_order", "meal")).lower(),
+            "type_of_vehicle": str(order_data.get("type_of_vehicle", "motorcycle")).lower(),
+            "festival": str(order_data.get("festival", "no")).lower(),
             "city_type": city_map.get(city_raw, "metropolitan"),
         }
 
@@ -122,7 +122,7 @@ class HttpEtaService:
 class HttpOrderService:
     """Calls Order Service to update status after saga completion."""
 
-    def __init__(self, base_url: str = "http://order:8001"):
+    def __init__(self, base_url: str = "http://order-service:8001"):
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url, timeout=DEFAULT_TIMEOUT)
 

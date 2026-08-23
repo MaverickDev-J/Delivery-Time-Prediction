@@ -117,4 +117,22 @@ notebooks/*.csv
 
 # Claude Code CLI local config & secrets
 .claude/
+claude_run/.claude/
+**/.claude/
+*.local.json
+*.secret
+*.key
+
+# Windows / Mac OS metadata
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+.DS_Store
+
+# Temporary & Editor backup files
+*.bak
+*.tmp
+*~
+*.swp
+*.swo
 

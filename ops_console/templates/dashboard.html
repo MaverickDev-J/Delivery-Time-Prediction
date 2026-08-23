@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>📊 System Dashboard</h2>
+    <span class="badge" hx-get="/ops/api/stats" hx-trigger="every 5s" hx-swap="innerHTML" hx-target="#live-badge">
+        <span id="live-badge">● Live</span>
+    </span>
+</div>
+
+<div class="stats-grid" hx-get="/ops/api/stats-cards" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <div class="stat-card"><div class="stat-label">Loading...</div><div class="stat-value">—</div></div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Recent Sagas</span>
+            <a href="/ops/sagas" class="btn btn-sm">View All →</a>
+        </div>
+        <div hx-get="/ops/api/recent-sagas" hx-trigger="load, every 5s" hx-swap="innerHTML">
+            <p class="text-muted text-sm">Loading...</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span class="card-title">Service Health</span>
+        </div>
+        <div hx-get="/ops/api/health-checks" hx-trigger="load, every 10s" hx-swap="innerHTML">
+            <p class="text-muted text-sm">Checking...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

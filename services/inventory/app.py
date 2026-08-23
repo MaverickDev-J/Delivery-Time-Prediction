@@ -10,6 +10,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, Integer, String, Text
 
 from contracts.inventory import (
@@ -77,9 +78,35 @@ def health():
     return {"status": "UP", "service": "inventory-service"}
 
 
+class SetStockRequest(BaseModel):
+    item_id: str
+    stock: int
+
+
+@app.post("/inventory/set-stock")
+def set_stock(req: SetStockRequest):
+    """Set stock for an item (used by flash sale race tests)."""
+    with get_session(SessionFactory) as session:
+        item = session.query(InventoryItem).filter(InventoryItem.item_id == req.item_id).with_for_update().first()
+        if not item:
+            item = InventoryItem(item_id=req.item_id, name=f"Flash Item {req.item_id}", stock=req.stock)
+            session.add(item)
+        else:
+            item.stock = req.stock
+    return {"status": "OK", "item_id": req.item_id, "stock": req.stock}
+
+
+@app.get("/inventory/stock/{item_id}")
+def get_item_stock(item_id: str):
+    """Get live stock for an item."""
+    with get_session(SessionFactory) as session:
+        item = session.query(InventoryItem).filter(InventoryItem.item_id == item_id).first()
+        return {"item_id": item_id, "stock": item.stock if item else 0}
+
+
 @app.post("/inventory/reserve", response_model=ReservationResponse)
 def reserve_stock(request: ReserveStockRequest):
-    """Reserve stock for an order. Atomic per-item decrement."""
+    """Reserve stock for an order. Atomic row-locked decrement."""
 
     cached = idem_store.get(request.idempotency_key)
     if cached:
@@ -88,9 +115,9 @@ def reserve_stock(request: ReserveStockRequest):
     reservation_id = f"RSV-{uuid.uuid4().hex[:12].upper()}"
 
     with get_session(SessionFactory) as session:
-        # Check all items have sufficient stock
+        # Check all items have sufficient stock with row lock
         for item_id in request.items:
-            item = session.query(InventoryItem).filter(InventoryItem.item_id == item_id).first()
+            item = session.query(InventoryItem).filter(InventoryItem.item_id == item_id).with_for_update().first()
             if not item or item.stock <= 0:
                 # Out of stock — do NOT reserve anything
                 response = ReservationResponse(
@@ -105,9 +132,9 @@ def reserve_stock(request: ReserveStockRequest):
                 logger.warning(f"Reservation {reservation_id} failed: {item_id} out of stock")
                 return response
 
-        # All items available — decrement stock
+        # All items available — decrement stock atomically
         for item_id in request.items:
-            item = session.query(InventoryItem).filter(InventoryItem.item_id == item_id).first()
+            item = session.query(InventoryItem).filter(InventoryItem.item_id == item_id).with_for_update().first()
             item.stock -= 1
 
         # Record reservation

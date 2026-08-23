@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Event Feed — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h2>📡 Live Event Feed</h2>
+    <div>
+        <button class="btn btn-sm" onclick="document.getElementById('event-feed').innerHTML=''">Clear</button>
+        <button class="btn btn-sm btn-primary" hx-get="/ops/api/events" hx-target="#event-feed" hx-swap="innerHTML">
+            🔄 Refresh
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">Recent Events from Redis Streams</span>
+        <span class="text-muted text-sm" hx-get="/ops/api/event-count" hx-trigger="load, every 5s" hx-swap="innerHTML">—</span>
+    </div>
+    <div id="event-feed" hx-get="/ops/api/events" hx-trigger="load, every 3s" hx-swap="innerHTML"
+         style="max-height:600px; overflow-y:auto;">
+        <p class="text-muted text-sm" style="text-align:center; padding:40px;">Loading events...</p>
+    </div>
+</div>
+{% endblock %}

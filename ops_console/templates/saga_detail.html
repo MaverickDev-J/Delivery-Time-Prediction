@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Saga {{ saga.order_id }} — DeliverIQ Ops{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h2>🔄 Saga Timeline</h2>
+        <p class="text-muted text-sm" style="margin-top:4px;">{{ saga.saga_id }} → {{ saga.order_id }}</p>
+    </div>
+    {% if 'CONFIRMED' in saga.current_state and 'DEGRADED' not in saga.current_state %}
+        <span class="status status-confirmed" style="font-size:0.9rem; padding:6px 16px;">{{ saga.current_state }}</span>
+    {% elif 'DEGRADED' in saga.current_state %}
+        <span class="status status-degraded" style="font-size:0.9rem; padding:6px 16px;">{{ saga.current_state }}</span>
+    {% elif 'CANCELLED' in saga.current_state %}
+        <span class="status status-cancelled" style="font-size:0.9rem; padding:6px 16px;">{{ saga.current_state }}</span>
+    {% else %}
+        <span class="status status-pending" style="font-size:0.9rem; padding:6px 16px;">{{ saga.current_state }}</span>
+    {% endif %}
+</div>
+
+<!-- Saga Summary -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Payment ID</div>
+        <div class="text-mono" style="font-size:0.85rem;">{{ saga.payment_id or 'N/A' }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Reservation ID</div>
+        <div class="text-mono" style="font-size:0.85rem;">{{ saga.reservation_id or 'N/A' }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">ETA</div>
+        <div style="font-size:1.2rem; font-weight:700;">
+            {% if saga.eta_minutes %}
+                {{ "%.0f"|format(saga.eta_minutes) }} min
+                <span class="text-muted text-sm">({{ "%.0f"|format(saga.eta_lower or 0) }}–{{ "%.0f"|format(saga.eta_upper or 0) }})</span>
+                {% if saga.degraded %}<span style="color:var(--yellow)"> ⚠ Degraded</span>{% endif %}
+            {% else %}
+                —
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Duration</div>
+        <div style="font-size:1.2rem; font-weight:700;">{{ duration or '—' }}</div>
+    </div>
+</div>
+
+<!-- Step Timeline -->
+<div class="card">
+    <div class="card-header">
+        <span class="card-title">State Transitions</span>
+        <span class="text-muted text-sm">{{ steps|length }} steps</span>
+    </div>
+    <div class="timeline">
+        {% for step in steps %}
+        <div class="timeline-step {% if step.step_type == 'COMPENSATE' %}compensate{% elif 'CONFIRMED' in step.to_state %}success{% endif %}">
+            <div class="step-header">
+                <span class="step-name">
+                    {% if step.step_type == 'COMPENSATE' %}🔴{% elif 'CONFIRMED' in step.to_state %}🟢{% else %}🔵{% endif %}
+                    {{ step.from_state }} → {{ step.to_state }}
+                </span>
+                <span class="step-time">{{ step.timestamp.strftime('%H:%M:%S.%f')[:-3] if step.timestamp else '' }}</span>
+            </div>
+            <div class="step-detail">
+                <span class="status {% if step.step_type == 'COMPENSATE' %}status-compensate{% else %}status-pending{% endif %}" style="margin-right:8px;">
+                    {{ step.step_type }}
+                </span>
+                {{ step.step_name }}
+                {% if step.detail %} — <span class="text-muted">{{ step.detail }}</span>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if not steps %}
+        <p class="text-muted">No step transitions recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% if saga.error_reason %}
+<div class="card" style="border-color: var(--red);">
+    <div class="card-title" style="color: var(--red); margin-bottom: 8px;">❌ Error</div>
+    <div class="code-block">{{ saga.error_reason }}</div>
+</div>
+{% endif %}
+
+<div style="margin-top:16px;">
+    <a href="/ops/sagas" class="btn">← Back to Saga Explorer</a>
+</div>
+{% endblock %}

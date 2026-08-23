@@ -1,20 +1,24 @@
 """
-Order Service — FastAPI application.
+Order Service — FastAPI application (v2: with JWT auth, pagination, rate limiting).
 
 Endpoints:
-  POST /orders          — Create an order (requires Idempotency-Key header)
-  GET  /orders/{id}     — Retrieve order by ID
-  PATCH /orders/{id}    — Update order status (used by saga orchestrator)
+  POST /api/v1/orders          — Create an order (requires JWT + Idempotency-Key)
+  GET  /api/v1/orders          — List orders for current user (paginated, filterable)
+  GET  /api/v1/orders/{id}     — Get order by ID (scoped to current user)
+  PATCH /orders/{id}           — Update order status (internal only — saga orchestrator)
 """
 
 import json
+import math
 import os
 import uuid
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 
+from contracts.auth import AuthContext, UserRole
 from contracts.events import EventEnvelope, EventType
 from contracts.order import CreateOrderRequest, OrderResponse, OrderStatus
+from core.auth_middleware import get_current_user, get_optional_user, require_role
 from core.database import Base, create_db_engine, create_session_factory, get_session, init_tables
 from core.idempotency import IdempotencyStore
 from core.logging import setup_logger
@@ -48,12 +52,20 @@ def health():
     return {"status": "UP", "service": "order-service"}
 
 
-@app.post("/orders", response_model=OrderResponse, status_code=status.HTTP_202_ACCEPTED)
+# ── Create Order (POST /api/v1/orders) ───────────────────────────────────────
+
+@app.post("/api/v1/orders", response_model=OrderResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_order(
     request: CreateOrderRequest,
     idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    auth: AuthContext = Depends(get_current_user),
 ):
-    """Create a new order with atomic outbox event write."""
+    """Create a new order with atomic outbox event write.
+
+    Requires: valid JWT (customer or admin role).
+    The customer_id is taken from the JWT, not from the request body —
+    a user can only create orders for themselves.
+    """
 
     # Check idempotency
     cached = idem_store.get(idempotency_key)
@@ -63,10 +75,10 @@ def create_order(
     order_id = f"ORD-{uuid.uuid4().hex[:12].upper()}"
 
     with get_session(SessionFactory) as session:
-        # Write order row
+        # Write order row — customer_id comes from JWT, not request
         order = Order(
             order_id=order_id,
-            customer_id=request.customer_id,
+            customer_id=auth.user_id,  # From JWT, not client input
             restaurant_id=request.restaurant_id,
             items=json.dumps(request.items),
             total_amount=request.total_amount,
@@ -82,7 +94,7 @@ def create_order(
             idempotency_key=idempotency_key,
             payload={
                 "order_id": order_id,
-                "customer_id": request.customer_id,
+                "customer_id": auth.user_id,
                 "restaurant_id": request.restaurant_id,
                 "items": request.items,
                 "total_amount": request.total_amount,
@@ -95,7 +107,6 @@ def create_order(
             payload=event.to_stream_dict(),
             event_id=event.event_id,
         )
-        # session.commit() happens automatically via get_session context manager
 
     response = OrderResponse(
         order_id=order_id,
@@ -106,21 +117,109 @@ def create_order(
     # Cache for idempotent replays
     idem_store.set(idempotency_key, response.model_dump(), status_code=202)
 
-    logger.info(f"Order {order_id} created for customer {request.customer_id}")
+    logger.info(f"Order {order_id} created by user {auth.user_id}")
     return response
 
 
-@app.get("/orders/{order_id}", response_model=OrderResponse)
-def get_order(order_id: str):
-    """Retrieve an order by its ID."""
+# ── List Orders with Pagination (GET /api/v1/orders) ────────────────────────
+
+@app.get("/api/v1/orders")
+def list_orders(
+    page: int = Query(default=1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(default=10, ge=1, le=100, description="Items per page (max 100)"),
+    order_status: str | None = Query(default=None, alias="status", description="Filter by status"),
+    sort: str = Query(default="-created_at", description="Sort field. Prefix with - for descending"),
+    auth: AuthContext = Depends(get_current_user),
+):
+    """List orders for the current user, with pagination and filtering.
+
+    Pagination response format:
+    {
+        "items": [...],
+        "total": 47,
+        "page": 2,
+        "limit": 10,
+        "pages": 5,
+        "has_next": true,
+        "has_prev": true
+    }
+
+    Example: GET /api/v1/orders?page=2&limit=10&status=CONFIRMED&sort=-created_at
+    """
     with get_session(SessionFactory) as session:
-        order = session.query(Order).filter(Order.order_id == order_id).first()
+        # Base query — scoped to current user (customer sees only their orders)
+        query = session.query(Order)
+
+        if auth.role == UserRole.CUSTOMER:
+            query = query.filter(Order.customer_id == auth.user_id)
+        # Admin sees all orders (no filter)
+
+        # Apply status filter
+        if order_status:
+            query = query.filter(Order.status == order_status.upper())
+
+        # Apply sort
+        descending = sort.startswith("-")
+        sort_field = sort.lstrip("-")
+        sort_column = getattr(Order, sort_field, Order.created_at)
+        if descending:
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+
+        # Count total
+        total = query.count()
+
+        # Apply pagination
+        offset = (page - 1) * limit
+        orders = query.offset(offset).limit(limit).all()
+
+        # Build response
+        items = [
+            OrderResponse(
+                order_id=o.order_id,
+                status=OrderStatus(o.status) if o.status in [s.value for s in OrderStatus] else OrderStatus.CREATED,
+                total_amount=o.total_amount,
+                eta_minutes=o.eta_minutes,
+                eta_lower=o.eta_lower,
+                eta_upper=o.eta_upper,
+                degraded=bool(o.degraded),
+            ).model_dump()
+            for o in orders
+        ]
+
+        pages = math.ceil(total / limit) if total > 0 else 1
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": pages,
+            "has_next": page < pages,
+            "has_prev": page > 1,
+        }
+
+
+# ── Get Single Order (GET /api/v1/orders/{id}) ──────────────────────────────
+
+@app.get("/api/v1/orders/{order_id}", response_model=OrderResponse)
+def get_order(order_id: str, auth: AuthContext = Depends(get_current_user)):
+    """Retrieve an order by its ID. Scoped to the current user."""
+    with get_session(SessionFactory) as session:
+        query = session.query(Order).filter(Order.order_id == order_id)
+
+        # Customers can only see their own orders
+        if auth.role == UserRole.CUSTOMER:
+            query = query.filter(Order.customer_id == auth.user_id)
+
+        order = query.first()
         if not order:
             raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
 
         return OrderResponse(
             order_id=order.order_id,
-            status=OrderStatus(order.status),
+            status=OrderStatus(order.status) if order.status in [s.value for s in OrderStatus] else OrderStatus.CREATED,
             total_amount=order.total_amount,
             eta_minutes=order.eta_minutes,
             eta_lower=order.eta_lower,
@@ -128,6 +227,10 @@ def get_order(order_id: str):
             degraded=bool(order.degraded),
         )
 
+
+# ── Internal: Update Order Status (PATCH /orders/{id}) ──────────────────────
+# This endpoint is called by the saga orchestrator over the internal network.
+# No JWT required — internal-only routes are reachable only on the compose network.
 
 @app.patch("/orders/{order_id}")
 def update_order_status(
@@ -138,7 +241,7 @@ def update_order_status(
     eta_upper: float | None = None,
     degraded: bool = False,
 ):
-    """Update order status — called by the saga orchestrator."""
+    """Update order status — called by the saga orchestrator (internal)."""
     with get_session(SessionFactory) as session:
         order = session.query(Order).filter(Order.order_id == order_id).first()
         if not order:
@@ -152,3 +255,80 @@ def update_order_status(
             order.degraded = 1 if degraded else 0
 
     return {"order_id": order_id, "status": new_status}
+
+
+# ── Backward compatibility: old /orders POST route (used by saga/Streamlit) ──
+
+@app.post("/orders", response_model=OrderResponse, status_code=status.HTTP_202_ACCEPTED)
+def create_order_legacy(
+    request: CreateOrderRequest,
+    idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    auth: AuthContext | None = Depends(get_optional_user),
+):
+    """Legacy endpoint — works with or without auth for backward compatibility."""
+    order_id = f"ORD-{uuid.uuid4().hex[:12].upper()}"
+    customer_id = auth.user_id if auth else request.customer_id
+
+    # Check idempotency
+    cached = idem_store.get(idempotency_key)
+    if cached:
+        return OrderResponse(**cached["response"])
+
+    with get_session(SessionFactory) as session:
+        order = Order(
+            order_id=order_id,
+            customer_id=customer_id,
+            restaurant_id=request.restaurant_id,
+            items=json.dumps(request.items),
+            total_amount=request.total_amount,
+            status=OrderStatus.CREATED.value,
+            idempotency_key=idempotency_key,
+        )
+        session.add(order)
+
+        event = EventEnvelope(
+            event_type=EventType.ORDER_CREATED,
+            correlation_id=order_id,
+            idempotency_key=idempotency_key,
+            payload={
+                "order_id": order_id,
+                "customer_id": customer_id,
+                "restaurant_id": request.restaurant_id,
+                "items": request.items,
+                "total_amount": request.total_amount,
+            },
+        )
+        write_outbox_event(
+            session=session,
+            event_type=EventType.ORDER_CREATED.value,
+            stream_name="order.created",
+            payload=event.to_stream_dict(),
+            event_id=event.event_id,
+        )
+
+    response = OrderResponse(
+        order_id=order_id,
+        status=OrderStatus.CREATED,
+        total_amount=request.total_amount,
+    )
+    idem_store.set(idempotency_key, response.model_dump(), status_code=202)
+    logger.info(f"Order {order_id} created (legacy route) for {customer_id}")
+    return response
+
+
+@app.get("/orders/{order_id}", response_model=OrderResponse)
+def get_order_legacy(order_id: str):
+    """Legacy endpoint without auth."""
+    with get_session(SessionFactory) as session:
+        order = session.query(Order).filter(Order.order_id == order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+        return OrderResponse(
+            order_id=order.order_id,
+            status=OrderStatus(order.status) if order.status in [s.value for s in OrderStatus] else OrderStatus.CREATED,
+            total_amount=order.total_amount,
+            eta_minutes=order.eta_minutes,
+            eta_lower=order.eta_lower,
+            eta_upper=order.eta_upper,
+            degraded=bool(order.degraded),
+        )
